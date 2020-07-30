@@ -5,6 +5,7 @@
   "types": ".out/main.d.ts",
   "license": "MIT",
   "scripts": {
+    "postinstall": "cdktf get",
     "compile": "tsc --pretty"
   },
   "dependencies": {
