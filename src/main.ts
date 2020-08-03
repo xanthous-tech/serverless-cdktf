@@ -30,7 +30,8 @@ class ServerlessPlugin {
     this.serverless.cli.log(`serverless temp dir is ${serverlessTmpDirPath}`)
 
     //TODO: DO NOT USE hard coded create-stack.json.
-    convert(`${serverlessTmpDirPath}/cloudformation-template-create-stack.json`)
+    const app = convert(`${serverlessTmpDirPath}/cloudformation-template-create-stack.json`)
+    app.synth()
   }
 }
 
