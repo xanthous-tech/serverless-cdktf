@@ -2,11 +2,11 @@ import { TerraformStack, TerraformOutput } from 'cdktf';
 import { Construct } from 'constructs';
 import { AwsProvider, S3Bucket, DataAwsIamPolicyDocument, S3BucketPolicy } from '../.gen/providers/aws';
 
-export class MyStack extends TerraformStack {
-  constructor(scope: Construct, name: string, resouceData: string) {
+export class Cf2Tf extends TerraformStack {
+  constructor(scope: Construct, name: string, cfStackJson: string) {
     super(scope, name);
 
-    const resources = JSON.parse(resouceData);
+    const resources = JSON.parse(cfStackJson);
 
     //TODO: use serverless options pass  the region
     new AwsProvider(this, 'provider', {
