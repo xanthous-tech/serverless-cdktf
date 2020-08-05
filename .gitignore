@@ -117,3 +117,9 @@ n
 .out
 .gen
 .terraform
+
+**/*~
+**/node_modules
+**/.DS_Store
+lib
+.idea
