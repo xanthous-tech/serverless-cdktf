@@ -1,6 +1,6 @@
 import Serverless from 'serverless';
 import { Hooks } from 'serverless/classes/Plugin';
-import path from 'path';
+// import path from 'path';
 import { createCdktfJson, runCdktfGet } from './utils/cdktf';
 // import { convert } from './helper';
 
@@ -44,10 +44,10 @@ class ServerlessCdktfPlugin {
   }
 
   private async convertToTerraformStack(): Promise<void> {
-    const serverlessTmpDirPath = path.resolve(this.serverless.config.servicePath, '.serverless');
-    this.serverless.cli.log(`serverless temp dir is ${serverlessTmpDirPath}`);
+    // const serverlessTmpDirPath = path.resolve(this.serverless.config.servicePath, '.serverless');
+    // this.serverless.cli.log(`serverless temp dir is ${serverlessTmpDirPath}`);
 
-    await createCdktfJson(this.serverless, serverlessTmpDirPath);
+    await createCdktfJson(this.serverless);
     await runCdktfGet(this.serverless);
   }
 }

@@ -1,26 +1,25 @@
+import Serverless from 'serverless';
 import { TerraformStack, TerraformOutput } from 'cdktf';
 import { Construct } from 'constructs';
 import { AwsProvider, S3Bucket, DataAwsIamPolicyDocument, S3BucketPolicy } from '../.gen/providers/aws';
 
 export class Cf2Tf extends TerraformStack {
-  constructor(scope: Construct, name: string, cfStackJson: string) {
+  constructor(scope: Construct, name: string, serverless: Serverless, cloudFormationResources: any) {
     super(scope, name);
-
-    const resources = JSON.parse(cfStackJson);
 
     //TODO: use serverless options pass  the region
     new AwsProvider(this, 'provider', {
-      region: 'us-west-2',
+      region: serverless.service.provider.region,
     });
 
     let s3Bucket: S3Bucket | undefined;
 
-    for (const key in resources) {
-      if (Object.prototype.hasOwnProperty.call(resources, key)) {
-        console.log(resources[key].type);
+    for (const key in cloudFormationResources) {
+      if (Object.prototype.hasOwnProperty.call(cloudFormationResources, key)) {
+        console.log(cloudFormationResources[key].type);
 
-        if (resources[key].type === 'AWS::S3::Bucket') {
-          const bucketProperties = resources[key].Properties;
+        if (cloudFormationResources[key].type === 'AWS::S3::Bucket') {
+          const bucketProperties = cloudFormationResources[key].Properties;
 
           //如果是 AWS::S3::Bucket
           s3Bucket = new S3Bucket(this, key, {
@@ -42,16 +41,16 @@ export class Cf2Tf extends TerraformStack {
       }
     }
 
-    for (const key in resources) {
-      if (Object.prototype.hasOwnProperty.call(resources, key)) {
-        console.log(resources[key].type);
+    for (const key in cloudFormationResources) {
+      if (Object.prototype.hasOwnProperty.call(cloudFormationResources, key)) {
+        console.log(cloudFormationResources[key].type);
 
         if (s3Bucket === undefined) {
           return;
         }
 
-        if (resources[key].type === 'AWS::S3::BucketPolicy') {
-          const policyProperties = resources[key].Properties;
+        if (cloudFormationResources[key].type === 'AWS::S3::BucketPolicy') {
+          const policyProperties = cloudFormationResources[key].Properties;
 
           const statement = policyProperties.PolicyDocument.Statement[0];
           const condition = statement.Condition;
