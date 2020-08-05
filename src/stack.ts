@@ -7,6 +7,8 @@ export class Cf2Tf extends TerraformStack {
   constructor(scope: Construct, name: string, serverless: Serverless, cloudFormationResources: any) {
     super(scope, name);
 
+    console.log(cloudFormationResources);
+
     //TODO: use serverless options pass  the region
     new AwsProvider(this, 'provider', {
       region: serverless.service.provider.region,
