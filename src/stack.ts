@@ -1,5 +1,5 @@
 import Serverless from 'serverless';
-import { TerraformStack, TerraformOutput, TerraformResource } from 'cdktf';
+import { TerraformStack, TerraformOutput, TerraformResource, S3Backend } from 'cdktf';
 import { Construct } from 'constructs';
 import { AwsProvider, S3Bucket, DataAwsIamPolicyDocument, S3BucketPolicy } from '../.gen/providers/aws';
 
@@ -30,6 +30,14 @@ export class Cf2Tf extends TerraformStack {
     new AwsProvider(this, 'provider', {
       region: serverless.service.provider.region,
       profile: (serverless.service.provider as any).profile,
+    });
+
+    new S3Backend(this, {
+      region: serverless.service.provider.region,
+      profile: (serverless.service.provider as any).profile,
+      // TODO: make bucket configurable
+      bucket: 'asu-terraform-state',
+      key: name,
     });
 
     this.convertCfResources();

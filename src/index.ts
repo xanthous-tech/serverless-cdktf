@@ -1,6 +1,6 @@
 import Serverless from 'serverless';
 import { Hooks } from 'serverless/classes/Plugin';
-import { createCdktfJson, runCdktfGet, runCdktfSynth } from './utils/cdktf';
+import { createCdktfJson, runCdktfGet, runCdktfSynth, runCdktfDeploy } from './utils/cdktf';
 
 interface PluginDefinition {
   pluginName: string;
@@ -48,6 +48,7 @@ class ServerlessCdktfPlugin {
     await createCdktfJson(this.serverless);
     await runCdktfGet(this.serverless);
     await runCdktfSynth(this.serverless, 'create-stack');
+    await runCdktfDeploy(this.serverless, 'create-stack');
   }
 }
 
