@@ -19,6 +19,10 @@ export class Cf2Tf extends TerraformStack {
     [key: string]: TerraformOutput;
   };
 
+  public refMaps: {
+    [key: string]: string;
+  };
+
   constructor(scope: Construct, name: string, public serverless: Serverless, cfTemplate: any) {
     super(scope, name);
 
@@ -27,10 +31,16 @@ export class Cf2Tf extends TerraformStack {
     this.tfResources = {};
     this.tfOutputs = {};
 
-    new AwsProvider(this, 'provider', {
+    const provider = new AwsProvider(this, 'provider', {
       region: serverless.service.provider.region,
       profile: (serverless.service.provider as any).profile,
     });
+
+    this.refMaps = {
+      'AWS::Region': serverless.service.provider.region,
+      'AWS::Partition': 'aws',
+      // "AWS::AccountId": provider.accessKey,
+    };
 
     new S3Backend(this, {
       region: serverless.service.provider.region,
@@ -230,7 +240,7 @@ export class Cf2Tf extends TerraformStack {
     return self.tfResources[Ref] as T;
   }
 
-  public static handleOutputRef(self: Cf2Tf, { Ref }: RefObject): any {
+  public handleOutputRef(self: Cf2Tf, { Ref }: RefObject): any {
     if (!Ref) {
       // is not ref, need to process other things
       throw new Error('it is not a ref object');
@@ -252,7 +262,7 @@ export class Cf2Tf extends TerraformStack {
   }
 
   //TODO: handle Fn:join stuff
-  public static handleResources(resources: any): string {
+  public handleResources(resources: any): string {
     //Contains Keys Fn::Get
     const fnFunc = ['Fn::Join'];
 
@@ -262,7 +272,7 @@ export class Cf2Tf extends TerraformStack {
       if (fnFunc.includes(key)) {
         switch (key) {
           case 'Fn::Join':
-            data = Cf2Tf.convertFnJoin(resources[key]);
+            data = this.convertFnJoin(resources[key]);
             break;
         }
         break;
@@ -272,7 +282,7 @@ export class Cf2Tf extends TerraformStack {
     return data;
   }
 
-  public static convertFnJoin(data: Array<any>): string {
+  public convertFnJoin(data: Array<any>): string {
     const separator = data[0];
     const others = <Array<any>>data.splice(1);
     const elements: Array<string> = [];
@@ -281,6 +291,12 @@ export class Cf2Tf extends TerraformStack {
         elements.push(others[i]);
       } else {
         //TODO: 如果是 Ref, 进行转换
+        if (Object.prototype.hasOwnProperty.call(others[i], 'Ref')) {
+          elements.push(this.refConvert(others[i]));
+        } else {
+          // TODO:handle other cases.
+          throw new Error('Not Ref! ');
+        }
       }
     }
 
@@ -290,6 +306,13 @@ export class Cf2Tf extends TerraformStack {
   public refConvert(data: RefObject): string {
     //TODO: REF
     //REF: AWS::Partition. AWS::REGION, AWS::AccountId
+    if (!data.Ref) {
+      throw new Error('Cannot find Ref!');
+    }
+    if (Object.prototype.hasOwnProperty.call(this.refMaps, data.Ref)) {
+      return this.refMaps[data.Ref];
+    }
+
     return '';
   }
 }

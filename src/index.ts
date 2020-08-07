@@ -15,7 +15,7 @@ class ServerlessCdktfPlugin {
     this.serverless = serverless;
     this.options = options;
 
-    // console.log(serverless);
+    console.log(serverless);
 
     serverless.cli.log('overriding AWS provider hooks');
     const pluginHooks = serverless.pluginManager.hooks as any;
