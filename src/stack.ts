@@ -2,7 +2,6 @@ import Serverless from 'serverless';
 import { TerraformStack, TerraformOutput, TerraformResource, S3Backend } from 'cdktf';
 import { Construct } from 'constructs';
 import { AwsProvider, S3Bucket, DataAwsIamPolicyDocument, S3BucketPolicy, CloudwatchLogGroup, IamRole, IamRolePolicy } from '../.gen/providers/aws';
-import { string } from 'yargs';
 
 interface RefObject {
   Ref?: string;
@@ -288,7 +287,9 @@ export class Cf2Tf extends TerraformStack {
     return elements.join(separator);
   }
 
-  private static refConvert(data: RefObject): string {
+  public refConvert(data: RefObject): string {
+    //TODO: REF
+    //REF: AWS::Partition. AWS::REGION, AWS::AccountId
     return '';
   }
 }
