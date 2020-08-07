@@ -1,7 +1,8 @@
 import Serverless from 'serverless';
 import { TerraformStack, TerraformOutput, TerraformResource, S3Backend } from 'cdktf';
 import { Construct } from 'constructs';
-import { AwsProvider, S3Bucket, DataAwsIamPolicyDocument, S3BucketPolicy } from '../.gen/providers/aws';
+import { AwsProvider, S3Bucket, DataAwsIamPolicyDocument, S3BucketPolicy, CloudwatchLogGroup, IamRole, IamRolePolicy } from '../.gen/providers/aws';
+import { string } from 'yargs';
 
 interface RefObject {
   Ref?: string;
@@ -70,10 +71,15 @@ export class Cf2Tf extends TerraformStack {
 
   public static convertCfResource(self: Cf2Tf, key: string, cfResource: any): TerraformResource {
     switch (cfResource.Type) {
+      //TODO: here we add resources.
       case 'AWS::S3::Bucket':
         return Cf2Tf.convertS3Bucket(self, key, cfResource);
       case 'AWS::S3::BucketPolicy':
         return Cf2Tf.convertS3BucketPolicy(self, key, cfResource);
+      case 'AWS::Logs::LogGroup':
+        return Cf2Tf.convertCloudwatchLogGroup(self, key, cfResource);
+      case 'AWS::IAM::Role':
+        return Cf2Tf.convertIamRole(self, key, cfResource);
       default:
         throw new Error(`unsupported type ${cfResource.Type}`);
     }
@@ -144,6 +150,74 @@ export class Cf2Tf extends TerraformStack {
     });
   }
 
+  public static convertCloudwatchLogGroup(self: Cf2Tf, key: string, cfTemplate: any): CloudwatchLogGroup {
+    const logGroupProperties = cfTemplate.Properties;
+
+    return new CloudwatchLogGroup(self, key, {
+      name: logGroupProperties.LogGroupName,
+    });
+  }
+
+  public static convertIamRole(self: Cf2Tf, key: string, cfTemplate: any): IamRole {
+    const iamRoleProperties = cfTemplate.Properties;
+
+    //TODO: construct role name from json file.
+    // const role_name = iamRoleProperties.RoleName
+    const role_name = 'cdktf-example-region-lambda-role';
+
+    const assumeRole = iamRoleProperties.AssumeRolePolicyDocument;
+    const statement = assumeRole.Statement[0];
+
+    const assume_role_policy = new DataAwsIamPolicyDocument(self, role_name + `assume_role_policy`, {
+      version: assumeRole.Version,
+      statement: [
+        {
+          actions: [statement.Action],
+          effect: statement.Effect,
+          principals: [
+            {
+              identifiers: [statement.Principle],
+              type: 'AWS',
+            },
+          ],
+        },
+      ],
+    });
+
+    const role = new IamRole(self, 'IamRoleLambdaExecution', {
+      assumeRolePolicy: assume_role_policy.json,
+      path: '/',
+      //TODO: fix name
+      name: 'aws_iam_role_lambda',
+    });
+
+    const iamRolePolicy = new DataAwsIamPolicyDocument(self, 'IamRoleLambdaExcutionPolicy', {
+      statement: [
+        {
+          //TODO: fix it by using variables
+          actions: ['logs:CreateLogStream', 'logs:CreateLogGroup'],
+          effect: 'Allow',
+          //TODO: fix resources.
+          resources: [],
+        },
+        {
+          actions: ['logs:PutLogEvents'],
+          effect: 'Allow',
+          //TODO: need convert.
+          resources: [],
+        },
+      ],
+    });
+
+    //add iam role policy here.
+    new IamRolePolicy(self, 'IamRoleLambdaExecutionPolicy', {
+      //TODO: fix name
+      name: 'cdktf-example-lambda',
+      role: role.id ?? '',
+      policy: iamRolePolicy.json,
+    });
+  }
+
   public static handleRef<T extends TerraformResource>(self: Cf2Tf, { Ref }: RefObject): T {
     if (!Ref) {
       // is not ref, need to process other things
@@ -176,5 +250,45 @@ export class Cf2Tf extends TerraformStack {
     }
 
     throw new Error('unimplemented ref type');
+  }
+
+  //TODO: handle Fn:join stuff
+  public static handleResources(resources: any): string {
+    //Contains Keys Fn::Get
+    const fnFunc = ['Fn::Join'];
+
+    let data = '';
+
+    for (const key in resources) {
+      if (fnFunc.includes(key)) {
+        switch (key) {
+          case 'Fn::Join':
+            data = Cf2Tf.convertFnJoin(resources[key]);
+            break;
+        }
+        break;
+      }
+    }
+
+    return data;
+  }
+
+  public static convertFnJoin(data: Array<any>): string {
+    const separator = data[0];
+    const others = <Array<any>>data.splice(1);
+    const elements: Array<string> = [];
+    for (let i = 0; i < others.length; i++) {
+      if (typeof others[i] === 'string') {
+        elements.push(others[i]);
+      } else {
+        //TODO: 如果是 Ref, 进行转换
+      }
+    }
+
+    return elements.join(separator);
+  }
+
+  private static refConvert(data: RefObject): string {
+    return '';
   }
 }

@@ -47,6 +47,8 @@ class ServerlessCdktfPlugin {
 
     await createCdktfJson(this.serverless);
     await runCdktfGet(this.serverless);
+
+    //change to `update-stack` when testing update Stack.
     await runCdktfSynth(this.serverless, 'create-stack');
     await runCdktfDeploy(this.serverless, 'create-stack');
   }
