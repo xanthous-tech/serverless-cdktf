@@ -1,7 +1,16 @@
 import Serverless from 'serverless';
 import { TerraformStack, TerraformOutput, TerraformResource, S3Backend } from 'cdktf';
 import { Construct } from 'constructs';
-import { AwsProvider, S3Bucket, DataAwsIamPolicyDocument, S3BucketPolicy, CloudwatchLogGroup, IamRole, IamRolePolicy } from '../.gen/providers/aws';
+import {
+  AwsProvider,
+  S3Bucket,
+  DataAwsIamPolicyDocument,
+  S3BucketPolicy,
+  CloudwatchLogGroup,
+  IamRole,
+  IamRolePolicy,
+  LambdaFunction,
+} from '../.gen/providers/aws';
 
 interface RefObject {
   Ref?: string;
@@ -89,6 +98,8 @@ export class Cf2Tf extends TerraformStack {
         return Cf2Tf.convertCloudwatchLogGroup(self, key, cfResource);
       case 'AWS::IAM::Role':
         return Cf2Tf.convertIamRole(self, key, cfResource);
+      case '"AWS::Lambda::Function':
+        return Cf2Tf.convertLambdaFunction(self, key, cfResource);
       default:
         throw new Error(`unsupported type ${cfResource.Type}`);
     }
@@ -154,6 +165,7 @@ export class Cf2Tf extends TerraformStack {
 
     return new S3BucketPolicy(self, key, {
       dependsOn: [s3Bucket],
+      //TODO: ?? instead of ! , why?
       bucket: s3Bucket.bucket ?? '',
       policy: s3Policy.json,
     });
@@ -227,6 +239,28 @@ export class Cf2Tf extends TerraformStack {
     });
   }
 
+  //TODO: implement this.
+  public static convertLambdaFunction(self: Cf2Tf, key: string, cfTemplate: any): LambdaFunction {
+    const lambdaProperties = cfTemplate.Properties;
+
+    return new LambdaFunction(self, key, {
+      //TODO: Ref convert!
+      // s3Bucket: lambdaProperties.Code
+      s3Bucket: 's3-bucket',
+      s3Key: lambdaProperties.Code.S3Key,
+      functionName: lambdaProperties.FunctionName,
+      handler: lambdaProperties.Handler,
+
+      //TODO: handle Fn::GetAtt
+      role: 'myRole',
+      runtime: lambdaProperties.MemorySize,
+      timeout: lambdaProperties.Timeout,
+
+      //TODO: 如果有 AWS::Lambda::Version
+      publish: true,
+    });
+  }
+
   public static handleRef<T extends TerraformResource>(self: Cf2Tf, { Ref }: RefObject): T {
     if (!Ref) {
       // is not ref, need to process other things
@@ -274,12 +308,25 @@ export class Cf2Tf extends TerraformStack {
           case 'Fn::Join':
             data = this.convertFnJoin(resources[key]);
             break;
+          case 'Fn::Sub':
+            data = this.convertFnSub(resource[key]);
         }
         break;
       }
     }
 
     return data;
+  }
+
+  //TODO: need to use regular expression.
+  public convertFnSub(data: string) {
+    const regex = /\$\{([a-zA-Z]+::[a-zA-Z]+)}/g;
+    const regexList = data.split(regex);
+
+    regexList.map((rawStr) => {
+      //TODO: start with ref,handle it.
+      rawStr.startsWith('Ref::');
+    });
   }
 
   public convertFnJoin(data: Array<any>): string {
