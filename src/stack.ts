@@ -10,6 +10,7 @@ import {
   IamRole,
   IamRolePolicy,
   LambdaFunction,
+  DataAwsVpc,
 } from '../.gen/providers/aws';
 
 interface RefObject {
@@ -45,10 +46,14 @@ export class Cf2Tf extends TerraformStack {
       profile: (serverless.service.provider as any).profile,
     });
 
+    const vpc = new DataAwsVpc(this, 'default', {});
+
+    const [, partition, , region, accountId] = vpc.arn.split(':');
+
     this.refMaps = {
-      'AWS::Region': serverless.service.provider.region,
-      'AWS::Partition': 'aws',
-      // "AWS::AccountId": provider.accessKey,
+      'AWS::Region': region,
+      'AWS::Partition': partition,
+      'AWS::AccountId': accountId,
     };
 
     new S3Backend(this, {
@@ -85,6 +90,14 @@ export class Cf2Tf extends TerraformStack {
       const cfResource = this.cfResources[key];
       this.tfResources[key] = Cf2Tf.convertCfResource(this, key, cfResource);
     }
+  }
+
+  private getRefMap(ref: string): string {
+    if (!Object.prototype.hasOwnProperty.call(this.refMaps, ref)) {
+      throw new Error(`Can not find property ${ref}`);
+    }
+
+    return this.refMaps[ref];
   }
 
   public static convertCfResource(self: Cf2Tf, key: string, cfResource: any): TerraformResource {
@@ -182,14 +195,11 @@ export class Cf2Tf extends TerraformStack {
   public static convertIamRole(self: Cf2Tf, key: string, cfTemplate: any): IamRole {
     const iamRoleProperties = cfTemplate.Properties;
 
-    //TODO: construct role name from json file.
-    // const role_name = iamRoleProperties.RoleName
-    const role_name = 'cdktf-example-region-lambda-role';
-
     const assumeRole = iamRoleProperties.AssumeRolePolicyDocument;
     const statement = assumeRole.Statement[0];
+    const policies = iamRoleProperties.Policies;
 
-    const assume_role_policy = new DataAwsIamPolicyDocument(self, role_name + `assume_role_policy`, {
+    const assume_role_policy = new DataAwsIamPolicyDocument(self, `${key}_assume_role_policy`, {
       version: assumeRole.Version,
       statement: [
         {
@@ -205,38 +215,32 @@ export class Cf2Tf extends TerraformStack {
       ],
     });
 
-    const role = new IamRole(self, 'IamRoleLambdaExecution', {
+    const role = new IamRole(self, key, {
       assumeRolePolicy: assume_role_policy.json,
-      path: '/',
-      //TODO: fix name
-      name: 'aws_iam_role_lambda',
+      path: iamRoleProperties.Path,
+      name: Cf2Tf.handleResources(iamRoleProperties.RoleName),
     });
 
-    const iamRolePolicy = new DataAwsIamPolicyDocument(self, 'IamRoleLambdaExcutionPolicy', {
-      statement: [
-        {
-          //TODO: fix it by using variables
-          actions: ['logs:CreateLogStream', 'logs:CreateLogGroup'],
-          effect: 'Allow',
-          //TODO: fix resources.
-          resources: [],
-        },
-        {
-          actions: ['logs:PutLogEvents'],
-          effect: 'Allow',
-          //TODO: need convert.
-          resources: [],
-        },
-      ],
+    //TODO: fix policies. (now it only support 1 policy)
+    const policyStatement = policies[0].PolicyDocument.Statement.map((statement: { Action: any; Effect: any; Resource: any[] }) => ({
+      actions: statement.Action,
+      effect: statement.Effect,
+      Resource: statement.Resource.map((resource) => Cf2Tf.handleResources(resource)),
+    }));
+
+    const iamRolePolicy = new DataAwsIamPolicyDocument(self, `${key}_iam_role_policy_document`, {
+      statement: policyStatement,
     });
 
     //add iam role policy here.
-    new IamRolePolicy(self, 'IamRoleLambdaExecutionPolicy', {
-      //TODO: fix name
-      name: 'cdktf-example-lambda',
+    new IamRolePolicy(self, `${key}_iam_role_policy`, {
+      //TODO: fix policies
+      name: Cf2Tf.handleResources(policies[0].PolicyName),
       role: role.id ?? '',
       policy: iamRolePolicy.json,
     });
+
+    return role;
   }
 
   //TODO: implement this.
@@ -274,7 +278,7 @@ export class Cf2Tf extends TerraformStack {
     return self.tfResources[Ref] as T;
   }
 
-  public handleOutputRef(self: Cf2Tf, { Ref }: RefObject): any {
+  public static handleOutputRef(self: Cf2Tf, { Ref }: RefObject): any {
     if (!Ref) {
       // is not ref, need to process other things
       throw new Error('it is not a ref object');
@@ -296,9 +300,9 @@ export class Cf2Tf extends TerraformStack {
   }
 
   //TODO: handle Fn:join stuff
-  public handleResources(resources: any): string {
+  public static handleResources(resources: any): string {
     //Contains Keys Fn::Get
-    const fnFunc = ['Fn::Join'];
+    const fnFunc = ['Fn::Join', 'Fn::Sub'];
 
     let data = '';
 
@@ -309,7 +313,8 @@ export class Cf2Tf extends TerraformStack {
             data = this.convertFnJoin(resources[key]);
             break;
           case 'Fn::Sub':
-            data = this.convertFnSub(resource[key]);
+            data = this.convertFnSub(resources[key]);
+            break;
         }
         break;
       }
@@ -318,18 +323,24 @@ export class Cf2Tf extends TerraformStack {
     return data;
   }
 
-  //TODO: need to use regular expression.
-  public convertFnSub(data: string) {
+  public convertFnSub(data: string): string {
     const regex = /\$\{([a-zA-Z]+::[a-zA-Z]+)}/g;
     const regexList = data.split(regex);
 
-    regexList.map((rawStr) => {
-      //TODO: start with ref,handle it.
-      rawStr.startsWith('Ref::');
-    });
+    regexList
+      .map((rawStr) => {
+        //TODO: start with ref,handle it.
+        if (rawStr.startsWith('AWS::')) {
+          return this.getRefMap(rawStr);
+        }
+
+        return rawStr;
+      })
+      .concat()
+      .join('');
   }
 
-  public convertFnJoin(data: Array<any>): string {
+  public static convertFnJoin(data: Array<any>): string {
     const separator = data[0];
     const others = <Array<any>>data.splice(1);
     const elements: Array<string> = [];
@@ -337,8 +348,8 @@ export class Cf2Tf extends TerraformStack {
       if (typeof others[i] === 'string') {
         elements.push(others[i]);
       } else {
-        //TODO: 如果是 Ref, 进行转换
         if (Object.prototype.hasOwnProperty.call(others[i], 'Ref')) {
+          //TODO: fix this.k
           elements.push(this.refConvert(others[i]));
         } else {
           // TODO:handle other cases.
