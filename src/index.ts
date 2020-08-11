@@ -49,8 +49,8 @@ class ServerlessCdktfPlugin {
     await runCdktfGet(this.serverless);
 
     //change to `update-stack` when testing update Stack.
-    await runCdktfSynth(this.serverless, 'create-stack');
-    await runCdktfDeploy(this.serverless, 'create-stack');
+    await runCdktfSynth(this.serverless, 'update-stack');
+    await runCdktfDeploy(this.serverless, 'update-stack');
   }
 }
 

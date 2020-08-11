@@ -17,6 +17,10 @@ interface RefObject {
   Ref?: string;
 }
 
+interface GetAttObject {
+  'Fn::GetAtt'?: string;
+}
+
 export class Cf2Tf extends TerraformStack {
   public cfResources: any;
   public cfOutputs: any;
@@ -76,7 +80,7 @@ export class Cf2Tf extends TerraformStack {
 
       const cfOutput = this.cfOutputs[key];
       this.tfOutputs[key] = new TerraformOutput(this, key, {
-        value: Cf2Tf.handleOutputRef(this, cfOutput.Value),
+        value: this.handleOutputRef(this, cfOutput.Value),
       });
     }
   }
@@ -88,7 +92,7 @@ export class Cf2Tf extends TerraformStack {
       }
 
       const cfResource = this.cfResources[key];
-      this.tfResources[key] = Cf2Tf.convertCfResource(this, key, cfResource);
+      this.tfResources[key] = this.convertCfResource(this, key, cfResource);
     }
   }
 
@@ -100,25 +104,25 @@ export class Cf2Tf extends TerraformStack {
     return this.refMaps[ref];
   }
 
-  public static convertCfResource(self: Cf2Tf, key: string, cfResource: any): TerraformResource {
+  public convertCfResource(self: Cf2Tf, key: string, cfResource: any): TerraformResource {
     switch (cfResource.Type) {
       //TODO: here we add resources.
       case 'AWS::S3::Bucket':
-        return Cf2Tf.convertS3Bucket(self, key, cfResource);
+        return this.convertS3Bucket(self, key, cfResource);
       case 'AWS::S3::BucketPolicy':
-        return Cf2Tf.convertS3BucketPolicy(self, key, cfResource);
+        return this.convertS3BucketPolicy(self, key, cfResource);
       case 'AWS::Logs::LogGroup':
-        return Cf2Tf.convertCloudwatchLogGroup(self, key, cfResource);
+        return this.convertCloudwatchLogGroup(self, key, cfResource);
       case 'AWS::IAM::Role':
-        return Cf2Tf.convertIamRole(self, key, cfResource);
+        return this.convertIamRole(self, key, cfResource);
       case '"AWS::Lambda::Function':
-        return Cf2Tf.convertLambdaFunction(self, key, cfResource);
+        return this.convertLambdaFunction(self, key, cfResource);
       default:
         throw new Error(`unsupported type ${cfResource.Type}`);
     }
   }
 
-  public static convertS3Bucket(self: Cf2Tf, key: string, cfTemplate: any): S3Bucket {
+  public convertS3Bucket(self: Cf2Tf, key: string, cfTemplate: any): S3Bucket {
     console.log('converting s3 bucket', cfTemplate);
     const bucketProperties = cfTemplate.Properties;
 
@@ -140,11 +144,11 @@ export class Cf2Tf extends TerraformStack {
     });
   }
 
-  public static convertS3BucketPolicy(self: Cf2Tf, key: string, cfTemplate: any): S3BucketPolicy {
+  public convertS3BucketPolicy(self: Cf2Tf, key: string, cfTemplate: any): S3BucketPolicy {
     console.log('converting s3 bucket policy', cfTemplate);
     const policyProperties = cfTemplate.Properties;
     const bucketRef = policyProperties.Bucket as RefObject;
-    const s3Bucket = Cf2Tf.handleRef<S3Bucket>(self, bucketRef);
+    const s3Bucket = this.handleRef<S3Bucket>(self, bucketRef);
 
     const statement = policyProperties.PolicyDocument.Statement[0];
     const condition = statement.Condition;
@@ -178,13 +182,12 @@ export class Cf2Tf extends TerraformStack {
 
     return new S3BucketPolicy(self, key, {
       dependsOn: [s3Bucket],
-      //TODO: ?? instead of ! , why?
       bucket: s3Bucket.bucket ?? '',
       policy: s3Policy.json,
     });
   }
 
-  public static convertCloudwatchLogGroup(self: Cf2Tf, key: string, cfTemplate: any): CloudwatchLogGroup {
+  public convertCloudwatchLogGroup(self: Cf2Tf, key: string, cfTemplate: any): CloudwatchLogGroup {
     const logGroupProperties = cfTemplate.Properties;
 
     return new CloudwatchLogGroup(self, key, {
@@ -192,7 +195,7 @@ export class Cf2Tf extends TerraformStack {
     });
   }
 
-  public static convertIamRole(self: Cf2Tf, key: string, cfTemplate: any): IamRole {
+  public convertIamRole(self: Cf2Tf, key: string, cfTemplate: any): IamRole {
     const iamRoleProperties = cfTemplate.Properties;
 
     const assumeRole = iamRoleProperties.AssumeRolePolicyDocument;
@@ -218,14 +221,14 @@ export class Cf2Tf extends TerraformStack {
     const role = new IamRole(self, key, {
       assumeRolePolicy: assume_role_policy.json,
       path: iamRoleProperties.Path,
-      name: Cf2Tf.handleResources(iamRoleProperties.RoleName),
+      name: this.handleResources(iamRoleProperties.RoleName),
     });
 
     //TODO: fix policies. (now it only support 1 policy)
     const policyStatement = policies[0].PolicyDocument.Statement.map((statement: { Action: any; Effect: any; Resource: any[] }) => ({
       actions: statement.Action,
       effect: statement.Effect,
-      Resource: statement.Resource.map((resource) => Cf2Tf.handleResources(resource)),
+      Resource: statement.Resource.map((resource) => this.handleResources(resource)),
     }));
 
     const iamRolePolicy = new DataAwsIamPolicyDocument(self, `${key}_iam_role_policy_document`, {
@@ -235,7 +238,7 @@ export class Cf2Tf extends TerraformStack {
     //add iam role policy here.
     new IamRolePolicy(self, `${key}_iam_role_policy`, {
       //TODO: fix policies
-      name: Cf2Tf.handleResources(policies[0].PolicyName),
+      name: this.handleResources(policies[0].PolicyName),
       role: role.id ?? '',
       policy: iamRolePolicy.json,
     });
@@ -243,20 +246,20 @@ export class Cf2Tf extends TerraformStack {
     return role;
   }
 
-  //TODO: implement this.
-  public static convertLambdaFunction(self: Cf2Tf, key: string, cfTemplate: any): LambdaFunction {
+  public convertLambdaFunction(self: Cf2Tf, key: string, cfTemplate: any): LambdaFunction {
     const lambdaProperties = cfTemplate.Properties;
 
+    const s3Bucket = this.handleRef<S3Bucket>(self, lambdaProperties.Code.Bucket);
+
+    const role = this.handleFnGetAtt<IamRole>(self, lambdaProperties.Role);
+
     return new LambdaFunction(self, key, {
-      //TODO: Ref convert!
-      // s3Bucket: lambdaProperties.Code
-      s3Bucket: 's3-bucket',
+      s3Bucket: s3Bucket.bucket,
       s3Key: lambdaProperties.Code.S3Key,
       functionName: lambdaProperties.FunctionName,
       handler: lambdaProperties.Handler,
 
-      //TODO: handle Fn::GetAtt
-      role: 'myRole',
+      role: role.arn,
       runtime: lambdaProperties.MemorySize,
       timeout: lambdaProperties.Timeout,
 
@@ -265,20 +268,27 @@ export class Cf2Tf extends TerraformStack {
     });
   }
 
-  public static handleRef<T extends TerraformResource>(self: Cf2Tf, { Ref }: RefObject): T {
+  public handleFnGetAtt<T extends TerraformResource>(self: Cf2Tf, att: GetAttObject): T {
+    if (!att['Fn::GetAtt']) {
+      throw new Error('cannot find Fn::GetAtt');
+    }
+    return this.handleRef<T>(self, { Ref: att['Fn::GetAtt'][0] });
+  }
+
+  public handleRef<T extends TerraformResource>(self: Cf2Tf, { Ref }: RefObject): T {
     if (!Ref) {
       // is not ref, need to process other things
       throw new Error('it is not a ref object');
     }
 
     if (!self.tfResources[Ref] && self.cfResources[Ref]) {
-      self.tfResources[Ref] = Cf2Tf.convertCfResource(self, Ref, self.cfResources[Ref]);
+      self.tfResources[Ref] = this.convertCfResource(self, Ref, self.cfResources[Ref]);
     }
 
     return self.tfResources[Ref] as T;
   }
 
-  public static handleOutputRef(self: Cf2Tf, { Ref }: RefObject): any {
+  public handleOutputRef(self: Cf2Tf, { Ref }: RefObject): any {
     if (!Ref) {
       // is not ref, need to process other things
       throw new Error('it is not a ref object');
@@ -299,8 +309,7 @@ export class Cf2Tf extends TerraformStack {
     throw new Error('unimplemented ref type');
   }
 
-  //TODO: handle Fn:join stuff
-  public static handleResources(resources: any): string {
+  public handleResources(resources: any): string {
     //Contains Keys Fn::Get
     const fnFunc = ['Fn::Join', 'Fn::Sub'];
 
@@ -327,20 +336,18 @@ export class Cf2Tf extends TerraformStack {
     const regex = /\$\{([a-zA-Z]+::[a-zA-Z]+)}/g;
     const regexList = data.split(regex);
 
-    regexList
+    return regexList
       .map((rawStr) => {
-        //TODO: start with ref,handle it.
         if (rawStr.startsWith('AWS::')) {
           return this.getRefMap(rawStr);
         }
-
         return rawStr;
       })
       .concat()
       .join('');
   }
 
-  public static convertFnJoin(data: Array<any>): string {
+  public convertFnJoin(data: Array<any>): string {
     const separator = data[0];
     const others = <Array<any>>data.splice(1);
     const elements: Array<string> = [];
@@ -349,7 +356,6 @@ export class Cf2Tf extends TerraformStack {
         elements.push(others[i]);
       } else {
         if (Object.prototype.hasOwnProperty.call(others[i], 'Ref')) {
-          //TODO: fix this.k
           elements.push(this.refConvert(others[i]));
         } else {
           // TODO:handle other cases.
@@ -362,15 +368,13 @@ export class Cf2Tf extends TerraformStack {
   }
 
   public refConvert(data: RefObject): string {
-    //TODO: REF
-    //REF: AWS::Partition. AWS::REGION, AWS::AccountId
     if (!data.Ref) {
       throw new Error('Cannot find Ref!');
     }
     if (Object.prototype.hasOwnProperty.call(this.refMaps, data.Ref)) {
       return this.refMaps[data.Ref];
+    } else {
+      throw new Error(`Can not find match for ${data.Ref}`);
     }
-
-    return '';
   }
 }
