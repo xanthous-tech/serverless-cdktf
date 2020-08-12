@@ -37,6 +37,10 @@ export class Cf2Tf extends TerraformStack {
     [key: string]: string;
   };
 
+  public resourceRefTypeMap: {
+    [key: string]: string;
+  };
+
   constructor(scope: Construct, name: string, public serverless: Serverless, cfTemplate: any) {
     super(scope, name);
 
@@ -44,6 +48,7 @@ export class Cf2Tf extends TerraformStack {
     this.cfOutputs = cfTemplate.Outputs;
     this.tfResources = {};
     this.tfOutputs = {};
+    this.resourceRefTypeMap = {};
 
     const provider = new AwsProvider(this, 'provider', {
       region: serverless.service.provider.region,
@@ -109,6 +114,9 @@ export class Cf2Tf extends TerraformStack {
       return;
     }
 
+    //This is for versioning in lambda.
+    this.resourceRefTypeMap[key] = cfResource.Type;
+
     switch (cfResource.Type) {
       //TODO: here we add resources.
       case 'AWS::S3::Bucket':
@@ -129,6 +137,7 @@ export class Cf2Tf extends TerraformStack {
       case 'AWS::Lambda::Version':
         //TODO: fix this.
         // return this.convertNoOpFunction(key, cfResource);
+        this.addLambdaVersion(key, cfResource);
         break;
       default:
         throw new Error(`unsupported type ${cfResource.Type}`);
@@ -172,6 +181,7 @@ export class Cf2Tf extends TerraformStack {
     const s3Policy = new DataAwsIamPolicyDocument(this, `${key}Document`, {
       statement: [
         {
+          //TODO: why action here?
           actions: [statement.Action],
           effect: statement.Effect,
           principals: [
@@ -219,11 +229,12 @@ export class Cf2Tf extends TerraformStack {
       version: assumeRole.Version,
       statement: [
         {
-          actions: [statement.Action],
+          actions: statement.Action,
           effect: statement.Effect,
           principals: [
             {
-              identifiers: [statement.Principle],
+              // identifiers: [statement.Principle],
+              identifiers: ['*'],
               type: 'AWS',
             },
           ],
@@ -238,10 +249,17 @@ export class Cf2Tf extends TerraformStack {
     });
 
     //TODO: fix policies. (now it only support 1 policy)
-    const policyStatement = policies[0].PolicyDocument.Statement.map((statement: { Action: any; Effect: any; Resource: any[] }) => ({
+    const policyStatement = policies[0].PolicyDocument.Statement.map((statement: { Action: any; Effect: any; Principal: any; Resource: any[] }) => ({
       actions: statement.Action,
       effect: statement.Effect,
-      Resource: statement.Resource.map((resource) => this.handleResources(resource)),
+      principals: [
+        {
+          // identifiers: [statement.Principal],
+          identifiers: ['*'],
+          type: 'AWS',
+        },
+      ],
+      resources: statement.Resource.map((resource: any) => this.handleResources(resource)),
     }));
 
     const iamRolePolicy = new DataAwsIamPolicyDocument(this, `${key}_iam_role_policy_document`, {
@@ -267,6 +285,21 @@ export class Cf2Tf extends TerraformStack {
 
     const role = this.handleFnGetAtt<IamRole>(lambdaProperties.Role);
 
+    let versionFlag = false;
+
+    //如果 cf resource's 里面有 version, 那么就 publish
+    for (const key in this.cfResources) {
+      if (!Object.prototype.hasOwnProperty.call(this.cfResources, key)) {
+        continue;
+      }
+
+      if (this.cfResources[key].Type === 'AWS::Lambda::Version') {
+        versionFlag = true;
+      }
+
+      break;
+    }
+
     this.tfResources[key] = new LambdaFunction(this, key, {
       s3Bucket: s3Bucket.bucket,
       s3Key: lambdaProperties.Code.S3Key,
@@ -274,12 +307,20 @@ export class Cf2Tf extends TerraformStack {
       handler: lambdaProperties.Handler,
 
       role: role.arn,
-      runtime: lambdaProperties.MemorySize,
+      runtime: lambdaProperties.Runtime,
       timeout: lambdaProperties.Timeout,
 
-      //TODO: 如果有 AWS::Lambda::Version
-      publish: true,
+      publish: versionFlag,
     });
+  }
+
+  public addLambdaVersion(key: string, cfTemplate: any) {
+    const versionProperties = cfTemplate.Properties;
+
+    const lambda = this.handleRef<LambdaFunction>({ Ref: versionProperties.FunctionName });
+
+    //TODO
+    //This is versioning things.
   }
 
   public handleFnGetAtt<T extends TerraformResource>(att: GetAttObject): T {
@@ -306,6 +347,11 @@ export class Cf2Tf extends TerraformStack {
     if (!Ref) {
       // is not ref, need to process other things
       throw new Error('it is not a ref object');
+    }
+
+    if (this.resourceRefTypeMap[Ref] === 'AWS::Lambda::Version') {
+      const lambda = this.handleRef<LambdaFunction>({ Ref: this.cfResources[Ref].Properties.FunctionName });
+      return lambda;
     }
 
     const tfResource = this.tfResources[Ref];
