@@ -248,7 +248,6 @@ export class Cf2Tf extends TerraformStack {
       name: this.handleResources(iamRoleProperties.RoleName),
     });
 
-    //TODO: fix policies. (now it only support 1 policy)
     const policyStatement = policies[0].PolicyDocument.Statement.map((statement: { Action: any; Effect: any; Principal: any; Resource: any[] }) => ({
       actions: statement.Action,
       effect: statement.Effect,
