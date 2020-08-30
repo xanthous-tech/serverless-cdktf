@@ -11,6 +11,7 @@ import {
   IamRolePolicy,
   LambdaFunction,
   DataAwsVpc,
+  CloudfrontDistribution,
 } from '../.gen/providers/aws';
 
 interface RefObject {
@@ -118,7 +119,6 @@ export class Cf2Tf extends TerraformStack {
     this.resourceRefTypeMap[key] = cfResource.Type;
 
     switch (cfResource.Type) {
-      //TODO: here we add resources.
       case 'AWS::S3::Bucket':
         this.convertS3Bucket(key, cfResource);
         break;
@@ -134,6 +134,34 @@ export class Cf2Tf extends TerraformStack {
       case 'AWS::Lambda::Function':
         this.convertLambdaFunction(key, cfResource);
         break;
+      case 'AWS::CloudFront::Distribution':
+        //TODO: add functions.
+        this.convertCloudFrontDistribution(key, cfResource);
+        break;
+      case 'AWS::ApiGateway::RestApi':
+        //TODO: add functions.
+        // this.convertAPiGatewayRestApi(key, cfResource);
+        break;
+      case 'AWS::ApiGateway::Resource':
+        //TODO: add functions.
+        // this.convertApiGatewayResource(key, cfResource)
+        break;
+      case 'AWS::ApiGateway::Method':
+        //TODO: add functions
+        // this.convertAPiGatewayMethod(key, cfResource);
+        break;
+      case 'AWS::ApiGateway::Authorizer':
+        //TODO: add functions
+        // this.convertAPiGatewayAuthorizer(key, cfResource);
+        break;
+      case 'AWS::ApiGateway::Deployment':
+        //TODO: add functions
+        // this.convertAPiGatewayDeployment(key, cfResource);
+        break;
+      case 'AWS::Lambda::Permission':
+        //TODO: convert lambda permission.
+        // this.convertLambdaPermission(key, cfResource);
+        break;
       case 'AWS::Lambda::Version':
         //TODO: fix this.
         // return this.convertNoOpFunction(key, cfResource);
@@ -142,6 +170,93 @@ export class Cf2Tf extends TerraformStack {
       default:
         throw new Error(`unsupported type ${cfResource.Type}`);
     }
+  }
+
+  //TODO: finish this.
+  public convertCloudFrontDistribution(key: string, cfTemplate: any): void {
+    console.log('converting cloudFront', cfTemplate);
+
+    const cfProperties = cfTemplate.Properties;
+    const distributionConfig = cfProperties.DistributionConfig;
+    const origins: any[] = cfProperties.DistributionConfig.Origins;
+
+    this.tfResources[key] = new CloudfrontDistribution(this, key, {
+      origin: origins.map((origin) => ({
+        originId: origin.Id,
+        //TODO: domainName contains Fn::Select, Fn::Split, Fn::GetAtt
+        domainName: 'hello-world',
+
+        //TODO: this.
+        // s3OriginConfig
+      })),
+      enabled: distributionConfig.Enabled,
+      httpVersion: distributionConfig.HttpVersion,
+      comment: distributionConfig.Comment,
+      aliases: distributionConfig.Aliases,
+      priceClass: distributionConfig.PriceClass,
+      defaultRootObject: distributionConfig.DefaultRootObject,
+      defaultCacheBehavior: [
+        {
+          allowedMethods: distributionConfig.DefaultCacheBehavior.AllowedMethods,
+          //TODO: not sure. cannot find cachedMethods.
+          cachedMethods: [],
+          targetOriginId: distributionConfig.DefaultCacheBehavior.TargetOriginId,
+          compress: distributionConfig.DefaultCacheBehavior.Compress,
+          forwardedValues: [
+            {
+              queryString: distributionConfig.DefaultCacheBehavior.ForwardedValues.QueryString,
+              cookies: [
+                {
+                  forward: distributionConfig.DefaultCacheBehavior.ForwardedValues.Cookies.Forward,
+                },
+              ],
+            },
+          ],
+          viewerProtocolPolicy: distributionConfig.distributionConfig.ViewerProtocolPolicy,
+        },
+      ],
+      cacheBehavior: distributionConfig.CacheBehaviors.map(
+        (cache: {
+          AllowedMethods: any;
+          CachedMethods: any;
+          ForwardedValues: { QueryString: any; Headers: any; Cookie: { Forward: any } };
+          MinTTL: string;
+          maxTtl: string;
+          TargetOriginId: any;
+          ViewerProtocolPolicy: any;
+          PathPattern: any;
+        }) => ({
+          allowedMethods: cache.AllowedMethods,
+          cachedMethods: cache.CachedMethods,
+          forwardedValues: [
+            {
+              queryString: cache.ForwardedValues.QueryString,
+              headers: cache.ForwardedValues.Headers,
+              cookies: [
+                {
+                  forward: cache.ForwardedValues.Cookie.Forward,
+                },
+              ],
+            },
+          ],
+          minTtl: parseInt(cache.MinTTL),
+          maxTtl: parseInt(cache.maxTtl),
+          targetOriginId: cache.TargetOriginId,
+          viewerProtocolPolicy: cache.ViewerProtocolPolicy,
+          PathPattern: cache.PathPattern,
+        }),
+      ),
+
+      viewerCertificate: [
+        {
+          acmCertificateArn: distributionConfig.ViewerCertificate.AcmCertificateArn,
+          sslSupportMethod: distributionConfig.ViewerCertificate.SslSupportMethod,
+        },
+      ],
+
+      //TODO: don't know what is restrictions.
+      restrictions: [],
+    });
   }
 
   public convertS3Bucket(key: string, cfTemplate: any): void {
@@ -318,7 +433,7 @@ export class Cf2Tf extends TerraformStack {
 
     const lambda = this.handleRef<LambdaFunction>({ Ref: versionProperties.FunctionName });
 
-    //TODO
+    //TODO:add handle for versions.
     //This is versioning things.
   }
 
@@ -370,7 +485,7 @@ export class Cf2Tf extends TerraformStack {
 
   public handleResources(resources: any): string {
     //Contains Keys Fn::Get
-    const fnFunc = ['Fn::Join', 'Fn::Sub'];
+    const fnFunc = ['Fn::Join', 'Fn::Sub', 'Fn::GetAtt'];
 
     let data = '';
 
@@ -383,12 +498,28 @@ export class Cf2Tf extends TerraformStack {
           case 'Fn::Sub':
             data = this.convertFnSub(resources[key]);
             break;
+          case 'Fn:Select':
+            //TODO: fix this.
+            break;
         }
         break;
       }
     }
 
     return data;
+  }
+
+  //TODO: 不完整
+  public convertFnSelect(data: any[]): any {
+    const index = data[0] as number;
+    //TODO: what if data[1] contains other resource??
+    return data[1][index];
+  }
+
+  public convertFnSplit(data: any[]): any {
+    const separator = data[0];
+    //TODO: data1 needs to convert to string.
+    return data[1].split(separator);
   }
 
   public convertFnSub(data: string): string {
