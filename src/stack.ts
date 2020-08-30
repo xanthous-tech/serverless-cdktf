@@ -13,6 +13,7 @@ import {
   DataAwsVpc,
   CloudfrontDistribution,
   ApiGatewayRestApi,
+  ApiGatewayResource,
 } from '../.gen/providers/aws';
 
 interface RefObject {
@@ -136,16 +137,13 @@ export class Cf2Tf extends TerraformStack {
         this.convertLambdaFunction(key, cfResource);
         break;
       case 'AWS::CloudFront::Distribution':
-        //TODO: add functions.
         this.convertCloudFrontDistribution(key, cfResource);
         break;
       case 'AWS::ApiGateway::RestApi':
-        //TODO: add functions.
         this.convertAPiGatewayRestApi(key, cfResource);
         break;
       case 'AWS::ApiGateway::Resource':
-        //TODO: add functions.
-        // this.convertApiGatewayResource(key, cfResource)
+        this.convertApiGatewayResource(key, cfResource);
         break;
       case 'AWS::ApiGateway::Method':
         //TODO: add functions
@@ -171,6 +169,19 @@ export class Cf2Tf extends TerraformStack {
       default:
         throw new Error(`unsupported type ${cfResource.Type}`);
     }
+  }
+
+  //TODO: fix the ref stuff.
+  public convertApiGatewayResource(key: string, cfTemplate: any): void {
+    console.log('converting api gateway resource', cfTemplate);
+
+    const cfProperties = cfTemplate.Properties;
+    this.tfResources[key] = new ApiGatewayResource(this, key, {
+      //TODO: handle the ref stuf.
+      parentId: '',
+      pathPart: cfProperties.PathPart,
+      restApiId: '',
+    });
   }
 
   public convertAPiGatewayRestApi(key: string, cfTemplate: any): void {
