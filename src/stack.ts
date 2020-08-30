@@ -12,6 +12,7 @@ import {
   LambdaFunction,
   DataAwsVpc,
   CloudfrontDistribution,
+  ApiGatewayRestApi,
 } from '../.gen/providers/aws';
 
 interface RefObject {
@@ -140,7 +141,7 @@ export class Cf2Tf extends TerraformStack {
         break;
       case 'AWS::ApiGateway::RestApi':
         //TODO: add functions.
-        // this.convertAPiGatewayRestApi(key, cfResource);
+        this.convertAPiGatewayRestApi(key, cfResource);
         break;
       case 'AWS::ApiGateway::Resource':
         //TODO: add functions.
@@ -172,7 +173,21 @@ export class Cf2Tf extends TerraformStack {
     }
   }
 
-  //TODO: finish this.
+  public convertAPiGatewayRestApi(key: string, cfTemplate: any): void {
+    console.log('converting apiKeyway RestApi', cfTemplate);
+
+    const cfProperties = cfTemplate.Properties;
+    this.tfResources[key] = new ApiGatewayRestApi(this, key, {
+      name: cfProperties.Name,
+      endpointConfiguration: [
+        {
+          types: cfProperties.EndpointConfiguration.Types,
+        },
+      ],
+      policy: cfProperties.Policy,
+    });
+  }
+
   public convertCloudFrontDistribution(key: string, cfTemplate: any): void {
     console.log('converting cloudFront', cfTemplate);
 
