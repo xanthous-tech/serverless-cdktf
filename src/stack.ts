@@ -14,6 +14,10 @@ import {
   CloudfrontDistribution,
   ApiGatewayRestApi,
   ApiGatewayResource,
+  ApiGatewayMethod,
+  LambdaPermission,
+  ApiGatewayDeployment,
+  ApiGatewayAuthorizer,
 } from '../.gen/providers/aws';
 
 interface RefObject {
@@ -146,20 +150,16 @@ export class Cf2Tf extends TerraformStack {
         this.convertApiGatewayResource(key, cfResource);
         break;
       case 'AWS::ApiGateway::Method':
-        //TODO: add functions
-        // this.convertAPiGatewayMethod(key, cfResource);
+        this.convertAPiGatewayMethod(key, cfResource);
         break;
       case 'AWS::ApiGateway::Authorizer':
-        //TODO: add functions
-        // this.convertAPiGatewayAuthorizer(key, cfResource);
+        this.convertAPiGatewayAuthorizer(key, cfResource);
         break;
       case 'AWS::ApiGateway::Deployment':
-        //TODO: add functions
-        // this.convertAPiGatewayDeployment(key, cfResource);
+        this.convertAPiGatewayDeployment(key, cfResource);
         break;
       case 'AWS::Lambda::Permission':
-        //TODO: convert lambda permission.
-        // this.convertLambdaPermission(key, cfResource);
+        this.convertLambdaPermission(key, cfResource);
         break;
       case 'AWS::Lambda::Version':
         //TODO: fix this.
@@ -169,6 +169,68 @@ export class Cf2Tf extends TerraformStack {
       default:
         throw new Error(`unsupported type ${cfResource.Type}`);
     }
+  }
+
+  public convertAPiGatewayAuthorizer(key: string, cfTemplate: any): void {
+    console.log('converting api gateway authorizer', cfTemplate);
+
+    const cfProperties = cfTemplate.Properties;
+    this.tfResources[key] = new ApiGatewayAuthorizer(this, key, {
+      authorizerResultTtlInSeconds: cfProperties.AuthorizerResultTtlInSeconds,
+      identitySource: cfProperties.IdentitySource,
+      name: cfProperties.Name,
+      //TODO: handle ref for rest api id.
+      restApiId: cfProperties.RestApiId,
+      //TODO: handle the ref
+      authorizerUri: cfProperties.AuthorizerUri,
+      type: cfProperties.Type,
+    });
+  }
+
+  public convertAPiGatewayDeployment(key: string, cfTemplate: any): void {
+    console.log('converting apigateway deployment', cfTemplate);
+
+    const cfProperties = cfTemplate.Properties;
+    this.tfResources[key] = new ApiGatewayDeployment(this, key, {
+      //TODO: rest api from ref.
+      restApiId: '',
+      stageName: cfProperties.StageName,
+    });
+  }
+
+  public convertLambdaPermission(key: string, cfTemplate: any): void {
+    console.log('converting lambda permission', cfTemplate);
+
+    const cfProperties = cfTemplate.Properties;
+    this.tfResources[key] = new LambdaPermission(this, key, {
+      functionName: '',
+      action: cfProperties.Action,
+      principal: cfProperties.Principal,
+      //TODO: source arn needs to handle Fn::Join.
+      sourceArn: cfProperties.SourceArn,
+    });
+  }
+
+  public convertAPiGatewayMethod(key: string, cfTemplate: any): void {
+    console.log('converting api gateway method', cfTemplate);
+
+    const cfProperties = cfTemplate.Properties;
+    this.tfResources[key] = new ApiGatewayMethod(this, key, {
+      httpMethod: cfProperties.HttpMethod,
+      requestParameters: cfProperties.RequestParameters,
+      //TODO: Handle resourceId ref
+      resourceId: '',
+      //TODO: Handle resourceId ref
+      restApiId: '',
+
+      apiKeyRequired: cfProperties.ApiKeyRequired,
+      authorization: cfProperties.AuthorizationType,
+
+      //TODO: fix this id (ref)
+      authorizerId: '',
+    });
+
+    //TODO: create response method https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/api_gateway_integration_response
   }
 
   //TODO: fix the ref stuff.
