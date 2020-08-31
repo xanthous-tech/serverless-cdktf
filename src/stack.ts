@@ -110,7 +110,13 @@ export class Cf2Tf extends TerraformStack {
 
   private getRefMap(ref: string): string {
     if (!Object.prototype.hasOwnProperty.call(this.refMaps, ref)) {
-      throw new Error(`Can not find property ${ref}`);
+      try {
+        const ins = this.handleRef({ Ref: ref });
+        return ins.getStringAttribute('id');
+      } catch (err) {
+        console.error(`cannot find ref ${ref}`);
+        throw err;
+      }
     }
 
     return this.refMaps[ref];
@@ -162,8 +168,6 @@ export class Cf2Tf extends TerraformStack {
         this.convertLambdaPermission(key, cfResource);
         break;
       case 'AWS::Lambda::Version':
-        //TODO: fix this.
-        // return this.convertNoOpFunction(key, cfResource);
         this.addLambdaVersion(key, cfResource);
         break;
       default:
@@ -175,14 +179,14 @@ export class Cf2Tf extends TerraformStack {
     console.log('converting api gateway authorizer', cfTemplate);
 
     const cfProperties = cfTemplate.Properties;
+    const restapi = this.handleRef<ApiGatewayRestApi>(cfProperties.RestApiId);
+
     this.tfResources[key] = new ApiGatewayAuthorizer(this, key, {
       authorizerResultTtlInSeconds: cfProperties.AuthorizerResultTtlInSeconds,
       identitySource: cfProperties.IdentitySource,
       name: cfProperties.Name,
-      //TODO: handle ref for rest api id.
-      restApiId: cfProperties.RestApiId,
-      //TODO: handle the ref
-      authorizerUri: cfProperties.AuthorizerUri,
+      restApiId: restapi.id!,
+      authorizerUri: this.handleResources(cfProperties.AuthorizerUri),
       type: cfProperties.Type,
     });
   }
@@ -192,8 +196,7 @@ export class Cf2Tf extends TerraformStack {
 
     const cfProperties = cfTemplate.Properties;
     this.tfResources[key] = new ApiGatewayDeployment(this, key, {
-      //TODO: rest api from ref.
-      restApiId: '',
+      restApiId: this.handleResources(cfProperties.RestApiId),
       stageName: cfProperties.StageName,
     });
   }
@@ -206,8 +209,7 @@ export class Cf2Tf extends TerraformStack {
       functionName: '',
       action: cfProperties.Action,
       principal: cfProperties.Principal,
-      //TODO: source arn needs to handle Fn::Join.
-      sourceArn: cfProperties.SourceArn,
+      sourceArn: this.handleResources(cfProperties.SourceArn),
     });
   }
 
@@ -215,34 +217,30 @@ export class Cf2Tf extends TerraformStack {
     console.log('converting api gateway method', cfTemplate);
 
     const cfProperties = cfTemplate.Properties;
+
     this.tfResources[key] = new ApiGatewayMethod(this, key, {
       httpMethod: cfProperties.HttpMethod,
       requestParameters: cfProperties.RequestParameters,
-      //TODO: Handle resourceId ref
-      resourceId: '',
-      //TODO: Handle resourceId ref
-      restApiId: '',
+      resourceId: this.handleResources(cfProperties.ResourceId),
+      restApiId: this.handleResources(cfProperties.RestApiId),
 
       apiKeyRequired: cfProperties.ApiKeyRequired,
       authorization: cfProperties.AuthorizationType,
 
-      //TODO: fix this id (ref)
-      authorizerId: '',
+      authorizerId: this.handleResources(cfProperties.AuthorizerId),
     });
 
     //TODO: create response method https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/api_gateway_integration_response
   }
 
-  //TODO: fix the ref stuff.
   public convertApiGatewayResource(key: string, cfTemplate: any): void {
     console.log('converting api gateway resource', cfTemplate);
 
     const cfProperties = cfTemplate.Properties;
     this.tfResources[key] = new ApiGatewayResource(this, key, {
-      //TODO: handle the ref stuf.
-      parentId: '',
+      parentId: this.handleResources(cfProperties.ParentId),
       pathPart: cfProperties.PathPart,
-      restApiId: '',
+      restApiId: this.handleResources(cfProperties.RestApiId),
     });
   }
 
@@ -384,7 +382,6 @@ export class Cf2Tf extends TerraformStack {
     const s3Policy = new DataAwsIamPolicyDocument(this, `${key}Document`, {
       statement: [
         {
-          //TODO: why action here?
           actions: [statement.Action],
           effect: statement.Effect,
           principals: [
@@ -487,21 +484,6 @@ export class Cf2Tf extends TerraformStack {
 
     const role = this.handleFnGetAtt<IamRole>(lambdaProperties.Role);
 
-    let versionFlag = false;
-
-    //如果 cf resource's 里面有 version, 那么就 publish
-    for (const key in this.cfResources) {
-      if (!Object.prototype.hasOwnProperty.call(this.cfResources, key)) {
-        continue;
-      }
-
-      if (this.cfResources[key].Type === 'AWS::Lambda::Version') {
-        versionFlag = true;
-      }
-
-      break;
-    }
-
     this.tfResources[key] = new LambdaFunction(this, key, {
       s3Bucket: s3Bucket.bucket,
       s3Key: lambdaProperties.Code.S3Key,
@@ -511,8 +493,6 @@ export class Cf2Tf extends TerraformStack {
       role: role.arn,
       runtime: lambdaProperties.Runtime,
       timeout: lambdaProperties.Timeout,
-
-      publish: versionFlag,
     });
   }
 
@@ -520,9 +500,7 @@ export class Cf2Tf extends TerraformStack {
     const versionProperties = cfTemplate.Properties;
 
     const lambda = this.handleRef<LambdaFunction>({ Ref: versionProperties.FunctionName });
-
-    //TODO:add handle for versions.
-    //This is versioning things.
+    lambda.publish = true;
   }
 
   public handleFnGetAtt<T extends TerraformResource>(att: GetAttObject): T {
@@ -571,42 +549,63 @@ export class Cf2Tf extends TerraformStack {
     throw new Error('unimplemented ref type');
   }
 
-  public handleResources(resources: any): string {
-    //Contains Keys Fn::Get
-    const fnFunc = ['Fn::Join', 'Fn::Sub', 'Fn::GetAtt'];
-
-    let data = '';
-
-    for (const key in resources) {
-      if (fnFunc.includes(key)) {
-        switch (key) {
-          case 'Fn::Join':
-            data = this.convertFnJoin(resources[key]);
-            break;
-          case 'Fn::Sub':
-            data = this.convertFnSub(resources[key]);
-            break;
-          case 'Fn:Select':
-            //TODO: fix this.
-            break;
-        }
-        break;
-      }
+  public handleResources(resources: any): any {
+    if (typeof resources == 'string') {
+      return resources;
     }
 
-    return data;
+    const [key] = Object.keys(resources);
+
+    switch (key) {
+      case 'Fn::Join':
+        return this.convertFnJoin(resources[key]);
+      case 'Fn::Sub':
+        return this.convertFnSub(resources[key]);
+      case 'Ref':
+        return this.getRefMap(resources[key]);
+      case 'Fn::GetAtt':
+        return this.convertGetAtt(resources[key]);
+      case 'Fn::Split':
+        return this.convertFnSplit(resources[key]);
+      case 'Fn:Select':
+        return this.convertFnSelect(resources[key]);
+      default:
+        throw new Error(`cannot find key ${key}`);
+    }
   }
 
-  //TODO: 不完整
-  public convertFnSelect(data: any[]): any {
+  public convertGetAtt(data: any[]): string {
+    const ref = this.handleRef({ Ref: data[0] });
+
+    const camelToSnakeCase = (str: string) =>
+      str[0].toLowerCase() + str.slice(1, str.length).replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);
+
+    const property = camelToSnakeCase(data[1] as string);
+
+    //Exceptions.
+    if (data[1] === 'WebsiteURL') {
+      return ref.getStringAttribute('website_endpoint');
+    }
+
+    //in most cases property are lowercase in terraform.
+    return ref.getStringAttribute(property);
+  }
+
+  public convertFnSelect(data: any[]): string {
     const index = data[0] as number;
-    //TODO: what if data[1] contains other resource??
+
+    if (!Array.isArray(data[1])) {
+      return this.handleResources(data[1])[index];
+    }
+
     return data[1][index];
   }
 
   public convertFnSplit(data: any[]): any {
     const separator = data[0];
-    //TODO: data1 needs to convert to string.
+    if (typeof data[1] !== 'string') {
+      return this.handleResources(data[1]).split(separator);
+    }
     return data[1].split(separator);
   }
 
@@ -634,27 +633,9 @@ export class Cf2Tf extends TerraformStack {
       if (typeof others[i] === 'string') {
         elements.push(others[i]);
       } else {
-        if (Object.prototype.hasOwnProperty.call(others[i], 'Ref')) {
-          elements.push(this.refConvert(others[i]));
-        } else {
-          // TODO:handle other cases.
-          console.log(`cannot find ref ${others[i]} for ${JSON.stringify(others)}`);
-          throw new Error('Not Ref!');
-        }
+        elements.push(this.handleResources(others[i]));
       }
     }
-
     return elements.join(separator);
-  }
-
-  public refConvert(data: RefObject): string {
-    if (!data.Ref) {
-      throw new Error('Cannot find Ref!');
-    }
-    if (Object.prototype.hasOwnProperty.call(this.refMaps, data.Ref)) {
-      return this.refMaps[data.Ref];
-    } else {
-      throw new Error(`Can not find match for ${data.Ref}`);
-    }
   }
 }
