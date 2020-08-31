@@ -18,6 +18,7 @@ import {
   LambdaPermission,
   ApiGatewayDeployment,
   ApiGatewayAuthorizer,
+  ApiGatewayGatewayResponse,
 } from '../.gen/providers/aws';
 
 interface RefObject {
@@ -218,7 +219,7 @@ export class Cf2Tf extends TerraformStack {
 
     const cfProperties = cfTemplate.Properties;
 
-    this.tfResources[key] = new ApiGatewayMethod(this, key, {
+    const apiGatewaymethod = new ApiGatewayMethod(this, key, {
       httpMethod: cfProperties.HttpMethod,
       requestParameters: cfProperties.RequestParameters,
       resourceId: this.handleResources(cfProperties.ResourceId),
@@ -230,6 +231,15 @@ export class Cf2Tf extends TerraformStack {
       authorizerId: this.handleResources(cfProperties.AuthorizerId),
     });
 
+    this.tfResources[key] = apiGatewaymethod;
+
+    const response = cfProperties.Integration;
+
+    //TODO:fix this.  not completely match.
+    new ApiGatewayGatewayResponse(this, `${key}_response`, {
+      restApiId: apiGatewaymethod.id!,
+      responseType: response.Type,
+    });
     //TODO: create response method https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/api_gateway_integration_response
   }
 
@@ -269,11 +279,7 @@ export class Cf2Tf extends TerraformStack {
     this.tfResources[key] = new CloudfrontDistribution(this, key, {
       origin: origins.map((origin) => ({
         originId: origin.Id,
-        //TODO: domainName contains Fn::Select, Fn::Split, Fn::GetAtt
-        domainName: 'hello-world',
-
-        //TODO: this.
-        // s3OriginConfig
+        domainName: this.handleResources(origin.DomainName),
       })),
       enabled: distributionConfig.Enabled,
       httpVersion: distributionConfig.HttpVersion,
