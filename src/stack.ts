@@ -236,11 +236,11 @@ export class Cf2Tf extends TerraformStack {
     const response = cfProperties.Integration;
 
     //TODO:fix this.  not completely match.
+    //TODO: create response method https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/api_gateway_integration_response
     new ApiGatewayGatewayResponse(this, `${key}_response`, {
       restApiId: apiGatewaymethod.id!,
       responseType: response.Type,
     });
-    //TODO: create response method https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/api_gateway_integration_response
   }
 
   public convertApiGatewayResource(key: string, cfTemplate: any): void {
