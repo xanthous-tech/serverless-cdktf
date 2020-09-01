@@ -270,7 +270,7 @@ export class Cf2Tf extends TerraformStack {
   }
 
   public convertCloudFrontDistribution(key: string, cfTemplate: any): void {
-    console.log('converting cloudFront', cfTemplate);
+    console.log('converting cloudFront distribution', JSON.stringify(cfTemplate));
 
     const cfProperties = cfTemplate.Properties;
     const distributionConfig = cfProperties.DistributionConfig;
@@ -304,14 +304,14 @@ export class Cf2Tf extends TerraformStack {
               ],
             },
           ],
-          viewerProtocolPolicy: distributionConfig.distributionConfig.ViewerProtocolPolicy,
+          viewerProtocolPolicy: '',
         },
       ],
       cacheBehavior: distributionConfig.CacheBehaviors.map(
         (cache: {
           AllowedMethods: any;
           CachedMethods: any;
-          ForwardedValues: { QueryString: any; Headers: any; Cookie: { Forward: any } };
+          ForwardedValues: { QueryString: any; Headers: any; Cookies: { Forward: any } };
           MinTTL: string;
           maxTtl: string;
           TargetOriginId: any;
@@ -326,7 +326,7 @@ export class Cf2Tf extends TerraformStack {
               headers: cache.ForwardedValues.Headers,
               cookies: [
                 {
-                  forward: cache.ForwardedValues.Cookie.Forward,
+                  forward: cache.ForwardedValues.Cookies.Forward,
                 },
               ],
             },
@@ -355,63 +355,96 @@ export class Cf2Tf extends TerraformStack {
     console.log('converting s3 bucket', cfTemplate);
     const bucketProperties = cfTemplate.Properties;
 
-    this.tfResources[key] = new S3Bucket(this, key, {
-      // TODO: this is not flexible enough to handle the BucketEncryption list
-      serverSideEncryptionConfiguration: [
-        {
-          rule: [
-            {
-              applyServerSideEncryptionByDefault: [
-                {
-                  sseAlgorithm: bucketProperties.BucketEncryption.ServerSideEncryptionConfiguration[0].ServerSideEncryptionByDefault.SSEAlgorithm,
-                },
-              ],
-            },
-          ],
-        },
-      ],
-    });
+    if (bucketProperties.BucketEncryption) {
+      this.tfResources[key] = new S3Bucket(this, key, {
+        // TODO: this is not flexible enough to handle the BucketEncryption list
+        serverSideEncryptionConfiguration: [
+          {
+            rule: [
+              {
+                applyServerSideEncryptionByDefault: [
+                  {
+                    sseAlgorithm: bucketProperties.BucketEncryption.ServerSideEncryptionConfiguration[0].ServerSideEncryptionByDefault.SSEAlgorithm,
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      });
+    } else {
+      this.tfResources[key] = new S3Bucket(this, key, {});
+    }
   }
 
   public convertS3BucketPolicy(key: string, cfTemplate: any): void {
-    console.log('converting s3 bucket policy', cfTemplate);
+    console.log('converting s3 bucket policy', JSON.stringify(cfTemplate));
     const policyProperties = cfTemplate.Properties;
-    const bucketRef = policyProperties.Bucket as RefObject;
-    const s3Bucket = this.handleRef<S3Bucket>(bucketRef);
+    let s3BucketName;
+    if (typeof policyProperties.Bucket === 'string') {
+      s3BucketName = policyProperties.Bucket;
+    } else {
+      const bucketRef = policyProperties.Bucket as RefObject;
+      const s3Bucket = this.handleRef<S3Bucket>(bucketRef);
+      s3BucketName = s3Bucket.bucket;
+    }
 
     const statement = policyProperties.PolicyDocument.Statement[0];
     const condition = statement.Condition;
-    //check condition keys
-    const conditionKey = Object.keys(condition)[0];
-    const conditionVariable = Object.keys(condition[conditionKey])[0];
 
-    const s3Policy = new DataAwsIamPolicyDocument(this, `${key}Document`, {
-      statement: [
-        {
-          actions: [statement.Action],
-          effect: statement.Effect,
-          principals: [
-            {
-              identifiers: [statement.Principal],
-              type: 'AWS',
-            },
-          ],
-          // TODO: handle Fn:Join
-          resources: [`arn:aws:s3:::${s3Bucket.bucket}/*`],
-          condition: [
-            {
-              test: conditionKey,
-              variable: conditionVariable,
-              values: [condition[conditionKey][conditionVariable].toString()],
-            },
-          ],
-        },
-      ],
-    });
+    let s3Policy;
+    //check condition keys
+    if (condition) {
+      console.log(`condition is ${JSON.stringify(condition)}`);
+      const [key] = Object.keys(condition);
+      const [conditionVariable] = Object.keys(condition[key]);
+
+      s3Policy = new DataAwsIamPolicyDocument(this, `${key}Document`, {
+        statement: [
+          {
+            actions: [statement.Action],
+            effect: statement.Effect,
+            principals: [
+              {
+                identifiers: [statement.Principal],
+                type: 'AWS',
+              },
+            ],
+            // TODO: handle Fn:Join
+            // resources: [`arn:aws:s3:::${s3Bucket.bucket}/*`],
+            resources: statement.Resource.map((resource: any) => this.handleResources(resource)),
+            condition: [
+              {
+                test: key,
+                variable: conditionVariable,
+                values: [condition[key][conditionVariable].toString()],
+              },
+            ],
+          },
+        ],
+      });
+    } else {
+      s3Policy = new DataAwsIamPolicyDocument(this, `${key}Document`, {
+        statement: [
+          {
+            actions: [statement.Action],
+            effect: statement.Effect,
+            principals: [
+              {
+                identifiers: [statement.Principal],
+                type: 'AWS',
+              },
+            ],
+            resources: [this.handleResources(statement.Resource)],
+            // TODO: handle Fn:Join
+            // resources: [`arn:aws:s3:::${s3Bucket.bucket}/*`],
+          },
+        ],
+      });
+    }
 
     this.tfResources[key] = new S3BucketPolicy(this, key, {
-      dependsOn: [s3Bucket],
-      bucket: s3Bucket.bucket ?? '',
+      bucket: s3BucketName,
       policy: s3Policy.json,
     });
   }
@@ -425,6 +458,7 @@ export class Cf2Tf extends TerraformStack {
   }
 
   public convertIamRole(key: string, cfTemplate: any): void {
+    console.log(`converting iam role ${JSON.stringify(cfTemplate)}`);
     const iamRoleProperties = cfTemplate.Properties;
 
     const assumeRole = iamRoleProperties.AssumeRolePolicyDocument;
@@ -454,41 +488,46 @@ export class Cf2Tf extends TerraformStack {
       name: this.handleResources(iamRoleProperties.RoleName),
     });
 
-    const policyStatement = policies[0].PolicyDocument.Statement.map((statement: { Action: any; Effect: any; Principal: any; Resource: any[] }) => ({
-      actions: statement.Action,
-      effect: statement.Effect,
-      principals: [
-        {
-          // identifiers: [statement.Principal],
-          identifiers: ['*'],
-          type: 'AWS',
-        },
-      ],
-      resources: statement.Resource.map((resource: any) => this.handleResources(resource)),
-    }));
+    if (policies) {
+      const policyStatement = policies[0].PolicyDocument.Statement.map(
+        (statement: { Action: any; Effect: any; Principal: any; Resource: any[] }) => ({
+          actions: statement.Action,
+          effect: statement.Effect,
+          principals: [
+            {
+              // identifiers: [statement.Principal],
+              identifiers: ['*'],
+              type: 'AWS',
+            },
+          ],
+          resources: statement.Resource.map((resource: any) => this.handleResources(resource)),
+        }),
+      );
 
-    const iamRolePolicy = new DataAwsIamPolicyDocument(this, `${key}_iam_role_policy_document`, {
-      statement: policyStatement,
-    });
+      const iamRolePolicy = new DataAwsIamPolicyDocument(this, `${key}_iam_role_policy_document`, {
+        statement: policyStatement,
+      });
 
-    //add iam role policy here.
-    new IamRolePolicy(this, `${key}_iam_role_policy`, {
-      //TODO: fix policies
-      name: this.handleResources(policies[0].PolicyName),
-      role: role.id ?? '',
-      policy: iamRolePolicy.json,
-    });
+      //add iam role policy here.
+      new IamRolePolicy(this, `${key}_iam_role_policy`, {
+        //TODO: fix policies
+        name: this.handleResources(policies[0].PolicyName),
+        role: role.id ?? '',
+        policy: iamRolePolicy.json,
+      });
 
-    this.tfResources[key] = role;
+      this.tfResources[key] = role;
+    }
   }
 
   public convertLambdaFunction(key: string, cfTemplate: any): void {
+    console.log(`converting lambda function ${JSON.stringify(cfTemplate)}`);
     const lambdaProperties = cfTemplate.Properties;
 
     console.log(`bucket is ${lambdaProperties.Code.S3Bucket}`);
     const s3Bucket = this.handleRef<S3Bucket>(lambdaProperties.Code.S3Bucket);
 
-    const role = this.handleFnGetAtt<IamRole>(lambdaProperties.Role);
+    const role = this.handleResources(lambdaProperties.Role);
 
     this.tfResources[key] = new LambdaFunction(this, key, {
       s3Bucket: s3Bucket.bucket,
@@ -496,7 +535,7 @@ export class Cf2Tf extends TerraformStack {
       functionName: lambdaProperties.FunctionName,
       handler: lambdaProperties.Handler,
 
-      role: role.arn,
+      role: role,
       runtime: lambdaProperties.Runtime,
       timeout: lambdaProperties.Timeout,
     });
@@ -559,7 +598,6 @@ export class Cf2Tf extends TerraformStack {
     if (typeof resources == 'string') {
       return resources;
     }
-
     const [key] = Object.keys(resources);
 
     switch (key) {
@@ -573,7 +611,7 @@ export class Cf2Tf extends TerraformStack {
         return this.convertGetAtt(resources[key]);
       case 'Fn::Split':
         return this.convertFnSplit(resources[key]);
-      case 'Fn:Select':
+      case 'Fn::Select':
         return this.convertFnSelect(resources[key]);
       default:
         throw new Error(`cannot find key ${key}`);
@@ -581,10 +619,13 @@ export class Cf2Tf extends TerraformStack {
   }
 
   public convertGetAtt(data: any[]): string {
+    console.log(`data is ${JSON.stringify(data)}`);
     const ref = this.handleRef({ Ref: data[0] });
 
     const camelToSnakeCase = (str: string) =>
       str[0].toLowerCase() + str.slice(1, str.length).replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);
+
+    console.log(`original att is ${data[1]}`);
 
     const property = camelToSnakeCase(data[1] as string);
 
