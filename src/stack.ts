@@ -67,6 +67,7 @@ export class Cf2Tf extends TerraformStack {
 
     const [, partition, , region, accountId] = vpc.arn.split(':');
 
+    //TODO:updata data.
     this.refMaps = {
       'AWS::Region': region,
       'AWS::Partition': partition,
@@ -110,14 +111,10 @@ export class Cf2Tf extends TerraformStack {
   }
 
   private getRefMap(ref: string): string {
+    console.log(`REF: ${JSON.stringify(this.refMaps)}`);
     if (!Object.prototype.hasOwnProperty.call(this.refMaps, ref)) {
-      try {
-        const ins = this.handleRef({ Ref: ref });
-        return ins.getStringAttribute('id');
-      } catch (err) {
-        console.error(`cannot find ref ${ref}`);
-        throw err;
-      }
+      const ins = this.handleRef({ Ref: ref });
+      return ins.getStringAttribute('id');
     }
 
     return this.refMaps[ref];
@@ -215,9 +212,12 @@ export class Cf2Tf extends TerraformStack {
   }
 
   public convertAPiGatewayMethod(key: string, cfTemplate: any): void {
-    console.log('converting api gateway method', cfTemplate);
+    console.log(`-----------------------------`);
+    console.log('converting api gateway method', key, cfTemplate);
+    console.log(`-----------------------------`);
 
     const cfProperties = cfTemplate.Properties;
+    console.log(cfProperties);
 
     const apiGatewaymethod = new ApiGatewayMethod(this, key, {
       httpMethod: cfProperties.HttpMethod,
@@ -231,16 +231,18 @@ export class Cf2Tf extends TerraformStack {
       authorizerId: this.handleResources(cfProperties.AuthorizerId),
     });
 
+    console.log(apiGatewaymethod);
+
     this.tfResources[key] = apiGatewaymethod;
 
     const response = cfProperties.Integration;
 
     //TODO:fix this.  not completely match.
     //TODO: create response method https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/api_gateway_integration_response
-    new ApiGatewayGatewayResponse(this, `${key}_response`, {
-      restApiId: apiGatewaymethod.id!,
-      responseType: response.Type,
-    });
+    // new ApiGatewayGatewayResponse(this, `${key}_response`, {
+    //   restApiId: apiGatewaymethod.id!,
+    //   responseType: response.Type,
+    // });
   }
 
   public convertApiGatewayResource(key: string, cfTemplate: any): void {
@@ -474,6 +476,7 @@ export class Cf2Tf extends TerraformStack {
           principals: [
             {
               // identifiers: [statement.Principle],
+              //TODO: use variables
               identifiers: ['*'],
               type: 'AWS',
             },
@@ -487,6 +490,8 @@ export class Cf2Tf extends TerraformStack {
       path: iamRoleProperties.Path,
       name: this.handleResources(iamRoleProperties.RoleName),
     });
+
+    this.tfResources[key] = role;
 
     if (policies) {
       const policyStatement = policies[0].PolicyDocument.Statement.map(
@@ -515,8 +520,6 @@ export class Cf2Tf extends TerraformStack {
         role: role.id ?? '',
         policy: iamRolePolicy.json,
       });
-
-      this.tfResources[key] = role;
     }
   }
 
@@ -595,7 +598,8 @@ export class Cf2Tf extends TerraformStack {
   }
 
   public handleResources(resources: any): any {
-    if (typeof resources == 'string') {
+    console.log(`handling resources ${JSON.stringify(resources)}`);
+    if (typeof resources === 'string' || typeof resources === 'undefined') {
       return resources;
     }
     const [key] = Object.keys(resources);
@@ -683,6 +687,8 @@ export class Cf2Tf extends TerraformStack {
         elements.push(this.handleResources(others[i]));
       }
     }
-    return elements.join(separator);
+    const result = elements.join(separator);
+    console.log(`join result is ${result}`);
+    return result;
   }
 }
