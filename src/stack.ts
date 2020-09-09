@@ -51,6 +51,11 @@ export class Cf2Tf extends TerraformStack {
   constructor(scope: Construct, name: string, public serverless: Serverless, cfTemplate: any) {
     super(scope, name);
 
+    const variables = this.serverless.service.custom;
+    console.log(`----------------`);
+    console.log(variables);
+    console.log(`----------------`);
+
     // this.convertCfResources();
     // this.convertCfOutputs();
   }

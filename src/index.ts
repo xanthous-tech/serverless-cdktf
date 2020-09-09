@@ -22,10 +22,8 @@ class ServerlessCdktfPlugin {
       this.serverless.service.setFunctionNames(this.serverless.processedInput.options);
       this.serverless.service.validate();
 
-      console.log(`--------variables---------`);
-      console.log(this.serverless.variables);
-      console.log(`--------options---------`);
-      console.log(options);
+      // console.log(`--------options---------`);
+      // console.log(options);
 
       serverless.cli.log('overriding AWS provider hooks');
       const pluginHooks = serverless.pluginManager.hooks as any;
