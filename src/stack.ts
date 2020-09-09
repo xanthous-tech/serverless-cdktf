@@ -18,7 +18,6 @@ import {
   LambdaPermission,
   ApiGatewayDeployment,
   ApiGatewayAuthorizer,
-  ApiGatewayGatewayResponse,
 } from '../.gen/providers/aws';
 
 interface RefObject {
@@ -52,38 +51,8 @@ export class Cf2Tf extends TerraformStack {
   constructor(scope: Construct, name: string, public serverless: Serverless, cfTemplate: any) {
     super(scope, name);
 
-    this.cfResources = cfTemplate.Resources;
-    this.cfOutputs = cfTemplate.Outputs;
-    this.tfResources = {};
-    this.tfOutputs = {};
-    this.resourceRefTypeMap = {};
-
-    const provider = new AwsProvider(this, 'provider', {
-      region: serverless.service.provider.region,
-      profile: (serverless.service.provider as any).profile,
-    });
-
-    const vpc = new DataAwsVpc(this, 'default', {});
-
-    const [, partition, , region, accountId] = vpc.arn.split(':');
-
-    //TODO:updata data.
-    this.refMaps = {
-      'AWS::Region': region,
-      'AWS::Partition': partition,
-      'AWS::AccountId': accountId,
-    };
-
-    new S3Backend(this, {
-      region: serverless.service.provider.region,
-      profile: (serverless.service.provider as any).profile,
-      // TODO: make bucket configurable
-      bucket: 'asu-terraform-state',
-      key: name,
-    });
-
-    this.convertCfResources();
-    this.convertCfOutputs();
+    // this.convertCfResources();
+    // this.convertCfOutputs();
   }
 
   private convertCfOutputs(): void {

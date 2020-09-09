@@ -1,0 +1,65 @@
+diff --git a/node_modules/@types/serverless/classes/PluginManager.d.ts b/node_modules/@types/serverless/classes/PluginManager.d.ts
+index 4990b37..2242474 100644
+--- a/node_modules/@types/serverless/classes/PluginManager.d.ts
++++ b/node_modules/@types/serverless/classes/PluginManager.d.ts
+@@ -15,6 +15,7 @@ declare class PluginManager {
+     loadCommand(pluginName: string, details: {}, key: string): {};
+     loadCommands(pluginInstance: Plugin): void;
+     spawn(commandsArray: string | string[], options?: any): Promise<void>;
++    validateCommand(commands: Serverless.processedInput)
+ 
+     cliOptions: {};
+     cliCommands: {};
+diff --git a/node_modules/@types/serverless/classes/Service.d.ts b/node_modules/@types/serverless/classes/Service.d.ts
+index e8d91ec..a1e17af 100644
+--- a/node_modules/@types/serverless/classes/Service.d.ts
++++ b/node_modules/@types/serverless/classes/Service.d.ts
+@@ -39,6 +39,7 @@ declare class Service {
+     getAllEventsInFunction(functionName: string): Serverless.Event[];
+ 
+     mergeResourceArrays(): void;
++    mergeArrays(): void;
+     validate(): Service;
+ 
+     update(data: {}): {};
+diff --git a/node_modules/@types/serverless/index.d.ts b/node_modules/@types/serverless/index.d.ts
+index 75afee4..dfb5548 100644
+--- a/node_modules/@types/serverless/index.d.ts
++++ b/node_modules/@types/serverless/index.d.ts
+@@ -17,6 +17,18 @@ import AwsProvider = require('./plugins/aws/provider/awsProvider');
+ import ApiGatewayValidate = require('./plugins/aws/package/compile/events/apiGateway/lib/validate');
+ 
+ declare namespace Serverless {
++    interface ProcessedInput {
++        commands: any;
++        options: any;
++    }
++
++    interface Variables {
++        custom: any;
++        populateService(options: any);
++    }
++
++
++
+     interface Options {
+         function?: string;
+         watch?: boolean;
+@@ -64,13 +76,16 @@ declare class Serverless {
+ 
+     getVersion(): string;
+ 
++
+     cli: {
+         log(message: string): null;
++        suppressLogIfPrintCommand(input: ProcessedInput?):null;
+     };
+ 
+     providers: {};
+     utils: Utils;
+-    variables: {};
++    variables: Serverless.Variables;
++    processedInput: Serverless.ProcessedInput;
+     yamlParser: YamlParser;
+     pluginManager: PluginManager;
+ 
