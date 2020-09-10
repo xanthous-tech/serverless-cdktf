@@ -2,7 +2,6 @@ import Serverless from 'serverless';
 import { TerraformStack, TerraformOutput, TerraformResource, S3Backend } from 'cdktf';
 import { Construct } from 'constructs';
 import {
-  AwsProvider,
   S3Bucket,
   DataAwsIamPolicyDocument,
   S3BucketPolicy,
@@ -10,7 +9,6 @@ import {
   IamRole,
   IamRolePolicy,
   LambdaFunction,
-  DataAwsVpc,
   CloudfrontDistribution,
   ApiGatewayRestApi,
   ApiGatewayResource,
@@ -18,6 +16,7 @@ import {
   LambdaPermission,
   ApiGatewayDeployment,
   ApiGatewayAuthorizer,
+  AwsProvider,
 } from '../.gen/providers/aws';
 
 interface RefObject {
@@ -31,6 +30,7 @@ interface GetAttObject {
 export class Cf2Tf extends TerraformStack {
   public cfResources: any;
   public cfOutputs: any;
+  public deployBucketName: string;
 
   public tfResources: {
     [key: string]: TerraformResource;
@@ -51,25 +51,60 @@ export class Cf2Tf extends TerraformStack {
   constructor(scope: Construct, name: string, public serverless: Serverless, cfTemplate: any) {
     super(scope, name);
 
-    const variables = this.serverless.service.custom;
-    console.log(`----------------`);
-    console.log(variables);
-    console.log(`----------------`);
+    this.cfResources = cfTemplate.Resources;
+    this.cfOutputs = cfTemplate.Outputs;
+    this.tfResources = {};
+    this.tfOutputs = {};
+    this.resourceRefTypeMap = {};
 
-    // this.convertCfResources();
-    // this.convertCfOutputs();
+    new AwsProvider(this, 'provider', {
+      region: serverless.service.provider.region,
+      profile: (serverless.service.provider as any).profile,
+    });
+
+    const variables = this.serverless.service.custom;
+
+    const accountId = variables.accountId;
+    //TODO:fix this to region
+    const region = variables.defaultRegion;
+    //TODO:fix this. make this configurable
+    const partition = 'aws';
+
+    this.deployBucketName = variables.deploymentBucketName;
+
+    console.log(`Bucket Name is ${this.deployBucketName}`);
+
+    this.refMaps = {
+      'AWS::Region': region,
+      'AWS::Partition': partition,
+      'AWS::AccountId': accountId,
+    };
+
+    new S3Backend(this, {
+      region: serverless.service.provider.region,
+      profile: (serverless.service.provider as any).profile,
+      // TODO: make bucket configurable
+      bucket: 'asu-terraform-state',
+      key: name,
+    });
+
+    this.convertCfResources();
+    this.convertCfOutputs();
   }
 
   private convertCfOutputs(): void {
+    console.log(`converting outputs ${JSON.stringify(this.cfOutputs)}`);
     for (const key in this.cfOutputs) {
+      console.log(`converting ${key}`);
       if (!Object.prototype.hasOwnProperty.call(this.cfOutputs, key)) {
         continue;
       }
 
       const cfOutput = this.cfOutputs[key];
       this.tfOutputs[key] = new TerraformOutput(this, key, {
-        value: this.handleOutputRef(cfOutput.Value),
+        value: this.handleResources(cfOutput.Value),
       });
+      console.log(`output ${key} converted`);
     }
   }
 
@@ -95,7 +130,9 @@ export class Cf2Tf extends TerraformStack {
   }
 
   public convertCfResource(key: string, cfResource: any): void {
+    console.log(`converting ${key}`);
     if (this.tfResources[key]) {
+      console.log(`returning`);
       return;
     }
 
@@ -174,15 +211,17 @@ export class Cf2Tf extends TerraformStack {
   }
 
   public convertLambdaPermission(key: string, cfTemplate: any): void {
-    console.log('converting lambda permission', cfTemplate);
+    console.log('converting lambda permission', key, cfTemplate);
 
     const cfProperties = cfTemplate.Properties;
     this.tfResources[key] = new LambdaPermission(this, key, {
-      functionName: '',
+      functionName: this.handleResources(cfProperties.FunctionName),
       action: cfProperties.Action,
       principal: cfProperties.Principal,
       sourceArn: this.handleResources(cfProperties.SourceArn),
     });
+
+    console.log(`converted lambda permission`, key, this.tfResources[key]);
   }
 
   public convertAPiGatewayMethod(key: string, cfTemplate: any): void {
@@ -331,9 +370,14 @@ export class Cf2Tf extends TerraformStack {
     console.log('converting s3 bucket', cfTemplate);
     const bucketProperties = cfTemplate.Properties;
 
+    if (key === 'ServerlessDeploymentBucket') {
+      bucketProperties.BucketName = this.deployBucketName;
+    }
+
     if (bucketProperties.BucketEncryption) {
       this.tfResources[key] = new S3Bucket(this, key, {
         // TODO: this is not flexible enough to handle the BucketEncryption list
+        bucket: bucketProperties.BucketName,
         serverSideEncryptionConfiguration: [
           {
             rule: [
@@ -349,7 +393,19 @@ export class Cf2Tf extends TerraformStack {
         ],
       });
     } else {
-      this.tfResources[key] = new S3Bucket(this, key, {});
+      const websiteConf = bucketProperties.WebsiteConfiguration;
+
+      this.tfResources[key] = new S3Bucket(this, key, {
+        bucket: bucketProperties.BucketName,
+        website: [
+          {
+            indexDocument: websiteConf.IndexDocument,
+            errorDocument: websiteConf.ErrorDocument,
+          },
+        ],
+      });
+
+      //TODO: Overrride properties when there's needed to change BucketName
     }
   }
 
@@ -613,7 +669,9 @@ export class Cf2Tf extends TerraformStack {
     }
 
     //in most cases property are lowercase in terraform.
-    return ref.getStringAttribute(property);
+    const att = ref.getStringAttribute(property);
+    console.log(`converted att is ${att}`);
+    return att;
   }
 
   public convertFnSelect(data: any[]): string {
