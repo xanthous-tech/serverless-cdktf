@@ -372,6 +372,9 @@ export class Cf2Tf extends TerraformStack {
 
     if (key === 'ServerlessDeploymentBucket') {
       bucketProperties.BucketName = this.deployBucketName;
+
+      //TODO: make sure bucketName in provider are not used before creating.
+      this.serverless.service.provider['deploymentBucket'] = this.deployBucketName;
     }
 
     if (bucketProperties.BucketEncryption) {
@@ -571,6 +574,9 @@ export class Cf2Tf extends TerraformStack {
       role: role,
       runtime: lambdaProperties.Runtime,
       timeout: lambdaProperties.Timeout,
+
+      //TODO: fix env.
+      environment: [],
     });
   }
 

@@ -11,10 +11,18 @@ index 4990b37..2242474 100644
      cliOptions: {};
      cliCommands: {};
 diff --git a/node_modules/@types/serverless/classes/Service.d.ts b/node_modules/@types/serverless/classes/Service.d.ts
-index e8d91ec..a1e17af 100644
+index e8d91ec..3d02884 100644
 --- a/node_modules/@types/serverless/classes/Service.d.ts
 +++ b/node_modules/@types/serverless/classes/Service.d.ts
-@@ -39,6 +39,7 @@ declare class Service {
+@@ -10,6 +10,7 @@ declare class Service {
+     custom: Service.Custom;
+ 
+     provider: {
++        deploymentBucket?: string;
+         compiledCloudFormationTemplate: {
+             Resources: {
+                 [key: string]: any;
+@@ -39,6 +40,7 @@ declare class Service {
      getAllEventsInFunction(functionName: string): Serverless.Event[];
  
      mergeResourceArrays(): void;
@@ -23,10 +31,10 @@ index e8d91ec..a1e17af 100644
  
      update(data: {}): {};
 diff --git a/node_modules/@types/serverless/index.d.ts b/node_modules/@types/serverless/index.d.ts
-index 75afee4..dfb5548 100644
+index 75afee4..86064f1 100644
 --- a/node_modules/@types/serverless/index.d.ts
 +++ b/node_modules/@types/serverless/index.d.ts
-@@ -17,6 +17,18 @@ import AwsProvider = require('./plugins/aws/provider/awsProvider');
+@@ -17,6 +17,19 @@ import AwsProvider = require('./plugins/aws/provider/awsProvider');
  import ApiGatewayValidate = require('./plugins/aws/package/compile/events/apiGateway/lib/validate');
  
  declare namespace Serverless {
@@ -38,6 +46,7 @@ index 75afee4..dfb5548 100644
 +    interface Variables {
 +        custom: any;
 +        populateService(options: any);
++        service: any;
 +    }
 +
 +
@@ -45,7 +54,7 @@ index 75afee4..dfb5548 100644
      interface Options {
          function?: string;
          watch?: boolean;
-@@ -64,13 +76,16 @@ declare class Serverless {
+@@ -64,13 +77,16 @@ declare class Serverless {
  
      getVersion(): string;
  

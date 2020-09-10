@@ -27,11 +27,12 @@ class ServerlessCdktfPlugin {
     // console.log(pluginHooks['aws:deploy:deploy:updateStack']);
 
     //Set noDeploy config
-    this.options['noDeploy'] = true;
+    // this.options['noDeploy'] = true;
     // console.log(options);
 
     this.hooks = {
-      'after:package:finalize': this.convertToTerraformStack.bind(this),
+      // 'after:package:finalize': this.convertToTerraformStack.bind(this),
+      'aws:deploy:deploy:createStack': this.convertToTerraformStack.bind(this),
     };
   }
 
@@ -43,8 +44,8 @@ class ServerlessCdktfPlugin {
     await runCdktfGet(this.serverless);
 
     //change to `update-stack` when testing update Stack.
-    await runCdktfSynth(this.serverless, 'update-stack');
-    await runCdktfDeploy(this.serverless, 'update-stack');
+    await runCdktfSynth(this.serverless, 'create-stack');
+    await runCdktfDeploy(this.serverless, 'create-stack');
   }
 }
 
