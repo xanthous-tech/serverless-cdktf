@@ -32,20 +32,22 @@ class ServerlessCdktfPlugin {
 
     this.hooks = {
       // 'after:package:finalize': this.convertToTerraformStack.bind(this),
-      'aws:deploy:deploy:createStack': this.convertToTerraformStack.bind(this),
+      'aws:deploy:deploy:createStack': this.createTerraformStack.bind(this),
+      'aws:deploy:deploy:updateStack': this.convertToTerraformStack.bind(this, 'update-stack'),
     };
   }
 
-  private async convertToTerraformStack(): Promise<void> {
-    // const serverlessTmpDirPath = path.resolve(this.serverless.config.servicePath, '.serverless');
-    // this.serverless.cli.log(`serverless temp dir is ${serverlessTmpDirPath}`);
+  private async createTerraformStack(): Promise<void> {
+    await this.convertToTerraformStack('create-stack');
+    // inject bucket name into serverless provider
+    this.serverless.service.provider.deploymentBucket = this.serverless.service.custom.deploymentBucketName;
+  }
 
+  private async convertToTerraformStack(stack: string): Promise<void> {
     await createCdktfJson(this.serverless);
     await runCdktfGet(this.serverless);
-
-    //change to `update-stack` when testing update Stack.
-    await runCdktfSynth(this.serverless, 'create-stack');
-    await runCdktfDeploy(this.serverless, 'create-stack');
+    await runCdktfSynth(this.serverless, stack);
+    await runCdktfDeploy(this.serverless, stack);
   }
 }
 
