@@ -329,7 +329,7 @@ export class Cf2Tf extends TerraformStack {
           CachedMethods: any;
           ForwardedValues: { QueryString: any; Headers: any; Cookies: { Forward: any } };
           MinTTL: string;
-          maxTtl: string;
+          DefaultTTL: string;
           TargetOriginId: any;
           ViewerProtocolPolicy: any;
           PathPattern: any;
@@ -348,7 +348,7 @@ export class Cf2Tf extends TerraformStack {
             },
           ],
           minTtl: parseInt(cache.MinTTL),
-          maxTtl: parseInt(cache.maxTtl),
+          defaultTtl: parseInt(cache.DefaultTTL),
           targetOriginId: cache.TargetOriginId,
           viewerProtocolPolicy: cache.ViewerProtocolPolicy,
           PathPattern: cache.PathPattern,
@@ -684,10 +684,19 @@ export class Cf2Tf extends TerraformStack {
     let array = data[1];
 
     if (!Array.isArray(array)) {
-      array = this.handleResources(data[1])[index];
+      array = this.handleResources(data[1]);
+
+      console.log(`convert Fn select array is ${array}`);
+
+      const regex = /^\${([a-zA-Z.-].+)}$/gm;
+      const result = regex.exec(array);
+      //如果能够匹配正则，说明是一个 ${} 的 variable，重新赋值 splitData 即可
+      if (result !== null) {
+        array = result[1];
+      }
     }
 
-    return array[index];
+    return `\${element(${array}, ${index})}`;
   }
 
   public convertFnSplit(data: any[]): any {
@@ -698,9 +707,16 @@ export class Cf2Tf extends TerraformStack {
     if (typeof data[1] !== 'string') {
       splitData = this.handleResources(data[1]);
     }
-    const splited = splitData.split(separator);
-    console.log(`splited is ${JSON.stringify(splited)}`);
-    return splited;
+
+    // According to https://github.com/hashicorp/terraform-cdk/issues/220 ,using escape hatches instead.
+    const regex = /^\${([a-zA-Z.-].+)}$/gm;
+    const result = regex.exec(splitData);
+    //如果能够匹配正则，说明是一个 ${} 的 variable，重新赋值 splitData 即可
+    if (result !== null) {
+      splitData = result[1];
+    }
+
+    return `\${split(${separator}, ${splitData})}`;
   }
 
   public convertFnSub(data: string): string {
