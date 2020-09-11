@@ -73,6 +73,7 @@ export class Cf2Tf extends TerraformStack {
     this.deployBucketName = variables.deploymentBucketName;
 
     console.log(`Bucket Name is ${this.deployBucketName}`);
+    console.log(`Terraform state ${name}`);
 
     this.refMaps = {
       'AWS::Region': region,
@@ -89,7 +90,7 @@ export class Cf2Tf extends TerraformStack {
     });
 
     this.convertCfResources();
-    this.convertCfOutputs();
+    // this.convertCfOutputs();
   }
 
   private convertCfOutputs(): void {
@@ -434,11 +435,11 @@ export class Cf2Tf extends TerraformStack {
       s3Policy = new DataAwsIamPolicyDocument(this, `${key}Document`, {
         statement: [
           {
-            actions: [statement.Action],
+            actions: [typeof statement.Action === 'string' ? statement.Action : [...statement.Action]],
             effect: statement.Effect,
             principals: [
               {
-                identifiers: [statement.Principal],
+                identifiers: [typeof statement.Principal === 'string' ? statement.Principal : [...statement.Principal]],
                 type: 'AWS',
               },
             ],
@@ -678,21 +679,28 @@ export class Cf2Tf extends TerraformStack {
   }
 
   public convertFnSelect(data: any[]): string {
+    console.log(`Fn select ${data}`);
     const index = data[0] as number;
+    let array = data[1];
 
-    if (!Array.isArray(data[1])) {
-      return this.handleResources(data[1])[index];
+    if (!Array.isArray(array)) {
+      array = this.handleResources(data[1])[index];
     }
 
-    return data[1][index];
+    return array[index];
   }
 
   public convertFnSplit(data: any[]): any {
+    console.log(`Fn split ${JSON.stringify(data)}`);
     const separator = data[0];
+    let splitData = data[1];
+
     if (typeof data[1] !== 'string') {
-      return this.handleResources(data[1]).split(separator);
+      splitData = this.handleResources(data[1]);
     }
-    return data[1].split(separator);
+    const splited = splitData.split(separator);
+    console.log(`splited is ${JSON.stringify(splited)}`);
+    return splited;
   }
 
   public convertFnSub(data: string): string {

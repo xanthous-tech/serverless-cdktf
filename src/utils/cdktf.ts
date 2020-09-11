@@ -51,7 +51,7 @@ export async function runCdktfSynth(serverless: Serverless, stack: string): Prom
     //TODO: config cdktf path in this plugin options.
     const cdktfGet = spawn(
       `../node_modules/.bin/cdktf`,
-      ['synth', '-a', `"../node_modules/.bin/sls-cdktf -s ${stack}"`, '-o', `./.serverless/cdktf-${stack}`],
+      ['synth', '-a', `"../node_modules/.bin/sls-cdktf --stack ${stack}"`, '-o', `./.serverless/cdktf-${stack}`],
       {
         cwd: process.cwd(),
         stdio: 'inherit',
@@ -78,7 +78,7 @@ export async function runCdktfDeploy(serverless: Serverless, stack: string): Pro
     //TODO: config cdktf path in this plugin options.
     const cdktfGet = spawn(
       `../node_modules/.bin/cdktf`,
-      ['deploy', '-a', `"../node_modules/.bin/sls-cdktf -s ${stack}"`, '-o', `./.serverless/cdktf-${stack}`, '--auto-approve'],
+      ['deploy', '-a', `"../node_modules/.bin/sls-cdktf --stack ${stack}"`, '-o', `./.serverless/cdktf-${stack}`, '--auto-approve'],
       {
         cwd: process.cwd(),
         stdio: 'inherit',
