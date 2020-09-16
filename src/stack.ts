@@ -323,7 +323,7 @@ export class Cf2Tf extends TerraformStack {
           viewerProtocolPolicy: '',
         },
       ],
-      cacheBehavior: distributionConfig.CacheBehaviors.map(
+      orderedCacheBehavior: distributionConfig.CacheBehaviors.map(
         (cache: {
           AllowedMethods: any;
           CachedMethods: any;
@@ -435,11 +435,12 @@ export class Cf2Tf extends TerraformStack {
       s3Policy = new DataAwsIamPolicyDocument(this, `${key}Document`, {
         statement: [
           {
-            actions: [typeof statement.Action === 'string' ? statement.Action : [...statement.Action]],
+            actions: typeof statement.Action === 'string' ? statement.Action : [...statement.Action],
             effect: statement.Effect,
             principals: [
               {
-                identifiers: [typeof statement.Principal === 'string' ? statement.Principal : [...statement.Principal]],
+                //TODO: chagne this to variables.
+                identifiers: ['*'],
                 type: 'AWS',
               },
             ],
@@ -460,11 +461,12 @@ export class Cf2Tf extends TerraformStack {
       s3Policy = new DataAwsIamPolicyDocument(this, `${key}Document`, {
         statement: [
           {
-            actions: [statement.Action],
+            actions: typeof statement.Action === 'string' ? statement.Action : [...statement.Action],
             effect: statement.Effect,
             principals: [
               {
-                identifiers: [statement.Principal],
+                //TODO: change this to variables
+                identifiers: ['*'],
                 type: 'AWS',
               },
             ],
@@ -502,7 +504,7 @@ export class Cf2Tf extends TerraformStack {
       version: assumeRole.Version,
       statement: [
         {
-          actions: statement.Action,
+          actions: typeof statement.Action === 'string' ? statement.Action : [...statement.Action],
           effect: statement.Effect,
           principals: [
             {
@@ -527,7 +529,7 @@ export class Cf2Tf extends TerraformStack {
     if (policies) {
       const policyStatement = policies[0].PolicyDocument.Statement.map(
         (statement: { Action: any; Effect: any; Principal: any; Resource: any[] }) => ({
-          actions: statement.Action,
+          actions: typeof statement.Action === 'string' ? statement.Action : [...statement.Action],
           effect: statement.Effect,
           principals: [
             {
@@ -716,7 +718,7 @@ export class Cf2Tf extends TerraformStack {
       splitData = result[1];
     }
 
-    return `\${split(${separator}, ${splitData})}`;
+    return `\${split("${separator}", ${splitData})}`;
   }
 
   public convertFnSub(data: string): string {
