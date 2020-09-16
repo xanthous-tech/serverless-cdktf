@@ -363,7 +363,15 @@ export class Cf2Tf extends TerraformStack {
       ],
 
       //TODO: don't know what is restrictions.
-      restrictions: [],
+      restrictions: [
+        {
+          geoRestriction: [
+            {
+              restrictionType: 'none',
+            },
+          ],
+        },
+      ],
     });
   }
 
@@ -435,7 +443,7 @@ export class Cf2Tf extends TerraformStack {
       s3Policy = new DataAwsIamPolicyDocument(this, `${key}Document`, {
         statement: [
           {
-            actions: typeof statement.Action === 'string' ? statement.Action : [...statement.Action],
+            actions: typeof statement.Action === 'string' ? [statement.Action] : [...statement.Action],
             effect: statement.Effect,
             principals: [
               {
@@ -504,7 +512,7 @@ export class Cf2Tf extends TerraformStack {
       version: assumeRole.Version,
       statement: [
         {
-          actions: typeof statement.Action === 'string' ? statement.Action : [...statement.Action],
+          actions: typeof statement.Action === 'string' ? [statement.Action] : [...statement.Action],
           effect: statement.Effect,
           principals: [
             {
