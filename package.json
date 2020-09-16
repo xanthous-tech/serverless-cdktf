@@ -22,6 +22,7 @@
   "scripts": {
     "cdktf:get": "cdktf get",
     "clean": "rimraf lib",
+    "prebuild": "yarn run cdktf:get",
     "build": "tsc",
     "clean:build": "npm run clean && npm run build",
     "lint": "eslint ./src --ext .ts",
