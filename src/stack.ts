@@ -198,8 +198,8 @@ export class Cf2Tf extends TerraformStack {
     this.tfResources[key] = new CloudwatchEventRule(this, key, {
       scheduleExpression: cfProperties.ScheduleExpression,
       isEnabled: cfProperties.State === 'ENABLED',
-      name = cfProperties.Targets[0].Id,
-      roleArn = this.handleResources(cfProperties.Targets[0].Arn),
+      name: cfProperties.Targets[0].Id,
+      roleArn: this.handleResources(cfProperties.Targets[0].Arn),
     });
   }
 
