@@ -31,10 +31,10 @@ index e8d91ec..3d02884 100644
  
      update(data: {}): {};
 diff --git a/node_modules/@types/serverless/index.d.ts b/node_modules/@types/serverless/index.d.ts
-index 75afee4..86064f1 100644
+index 3150d11..f88f50a 100644
 --- a/node_modules/@types/serverless/index.d.ts
 +++ b/node_modules/@types/serverless/index.d.ts
-@@ -17,6 +17,19 @@ import AwsProvider = require('./plugins/aws/provider/awsProvider');
+@@ -17,6 +17,17 @@ import AwsProvider = require('./plugins/aws/provider/awsProvider');
  import ApiGatewayValidate = require('./plugins/aws/package/compile/events/apiGateway/lib/validate');
  
  declare namespace Serverless {
@@ -42,31 +42,23 @@ index 75afee4..86064f1 100644
 +        commands: any;
 +        options: any;
 +    }
-+
++    
 +    interface Variables {
 +        custom: any;
-+        populateService(options: any);
++        populateService(options?: any):Promise<any>;
 +        service: any;
 +    }
-+
-+
-+
++        
      interface Options {
          function?: string;
          watch?: boolean;
-@@ -64,13 +77,16 @@ declare class Serverless {
- 
-     getVersion(): string;
- 
-+
-     cli: {
-         log(message: string): null;
-+        suppressLogIfPrintCommand(input: ProcessedInput?):null;
-     };
+@@ -70,9 +81,8 @@ declare class Serverless {
  
      providers: {};
      utils: Utils;
--    variables: {};
+-    variables: {
+-        populateService(): Promise<any>;
+-    };
 +    variables: Serverless.Variables;
 +    processedInput: Serverless.ProcessedInput;
      yamlParser: YamlParser;
