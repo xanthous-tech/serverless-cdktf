@@ -21,6 +21,7 @@ import {
   AwsProvider,
   DataAwsIamPolicyDocumentStatementPrincipals,
   CloudwatchEventRule,
+  CloudwatchEventTarget,
 } from '../.gen/providers/aws';
 
 interface RefObject {
@@ -198,10 +199,23 @@ export class Cf2Tf extends TerraformStack {
     const cfProperties = cfTemplate.Properties;
 
     this.tfResources[key] = new CloudwatchEventRule(this, key, {
+      name: cfProperties.Name,
+      description: cfProperties.Description,
+
+      eventPattern: JSON.stringify(cfProperties.EventPattern),
+
       scheduleExpression: cfProperties.ScheduleExpression,
       isEnabled: cfProperties.State === 'ENABLED',
-      name: cfProperties.Targets[0].Id,
-      roleArn: this.handleResources(cfProperties.Targets[0].Arn),
+      roleArn: this.handleResources(cfProperties.RoleArn),
+    });
+
+    const targets = cfProperties.Targets;
+    targets.map((target: { id: string; Arn: any }) => {
+      new CloudwatchEventTarget(this, target.id, {
+        rule: (this.tfResources[key] as CloudwatchEventRule).name!,
+        arn: target.Arn,
+        targetId: target.id,
+      });
     });
   }
 
@@ -310,6 +324,8 @@ export class Cf2Tf extends TerraformStack {
 
     const cfProperties = cfTemplate.Properties;
     const distributionConfig = cfProperties.DistributionConfig;
+    const cacheBehaviors = distributionConfig.CacheBehaviors;
+    const defaultCacheBehavior = distributionConfig.defaultCacheBehavior;
     const origins: any[] = cfProperties.DistributionConfig.Origins;
 
     this.tfResources[key] = new CloudfrontDistribution(this, key, {
@@ -326,8 +342,7 @@ export class Cf2Tf extends TerraformStack {
       defaultCacheBehavior: [
         {
           allowedMethods: distributionConfig.DefaultCacheBehavior.AllowedMethods,
-          //TODO: not sure. cannot find cachedMethods.
-          cachedMethods: [],
+          cachedMethods: cacheBehaviors.CachedMethods,
           targetOriginId: distributionConfig.DefaultCacheBehavior.TargetOriginId,
           compress: distributionConfig.DefaultCacheBehavior.Compress,
           forwardedValues: [
@@ -340,7 +355,7 @@ export class Cf2Tf extends TerraformStack {
               ],
             },
           ],
-          viewerProtocolPolicy: '',
+          viewerProtocolPolicy: defaultCacheBehavior.ViewerProtocolPolicy,
         },
       ],
       orderedCacheBehavior: distributionConfig.CacheBehaviors.map(
