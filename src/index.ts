@@ -23,12 +23,15 @@ class ServerlessCdktfPlugin {
     pluginHooks['aws:deploy:deploy:updateStack'] = pluginHooks['aws:deploy:deploy:updateStack'].filter(
       (plugin: PluginDefinition) => plugin.pluginName !== 'AwsDeploy',
     );
+    pluginHooks['aws:info'] = []; // kill info hooks
     // console.log(pluginHooks['aws:deploy:deploy:createStack']);
     // console.log(pluginHooks['aws:deploy:deploy:updateStack']);
 
     //Set noDeploy config
     // this.options['noDeploy'] = true;
     // console.log(options);
+
+    serverless.cli.log(`noDeploy - ${this.options['noDeploy']}`);
 
     this.hooks = {
       // 'after:package:finalize': this.convertToTerraformStack.bind(this),
@@ -44,10 +47,15 @@ class ServerlessCdktfPlugin {
   }
 
   private async convertToTerraformStack(stack: string): Promise<void> {
+    this.serverless.cli.log(`converting Serverless CF Stack ${stack} using CDKTF...`);
     await createCdktfJson(this.serverless);
     await runCdktfGet(this.serverless);
-    await runCdktfSynth(this.serverless, stack);
-    await runCdktfDeploy(this.serverless, stack);
+
+    if (!this.options['noDeploy']) {
+      await runCdktfDeploy(this.serverless, stack);
+    } else {
+      await runCdktfSynth(this.serverless, stack);
+    }
   }
 }
 

@@ -1,6 +1,8 @@
 import Serverless from 'serverless';
 import { TerraformStack, TerraformOutput, TerraformResource, S3Backend } from 'cdktf';
 import { Construct } from 'constructs';
+import _ from 'lodash';
+
 import {
   S3Bucket,
   DataAwsIamPolicyDocument,
@@ -17,6 +19,7 @@ import {
   ApiGatewayDeployment,
   ApiGatewayAuthorizer,
   AwsProvider,
+  DataAwsIamPolicyDocumentStatementPrincipals,
 } from '../.gen/providers/aws';
 
 interface RefObject {
@@ -63,11 +66,8 @@ export class Cf2Tf extends TerraformStack {
     });
 
     const variables = this.serverless.service.custom;
-
+    const region = this.serverless.service.provider.region || variables.defaultRegion;
     const accountId = variables.accountId;
-    //TODO:fix this to region
-    const region = variables.defaultRegion;
-    //TODO:fix this. make this configurable
     const partition = 'aws';
 
     this.deployBucketName = variables.deploymentBucketName;
@@ -183,6 +183,7 @@ export class Cf2Tf extends TerraformStack {
       default:
         throw new Error(`unsupported type ${cfResource.Type}`);
     }
+    // console.log(`converted resource ${key} ${this.tfResources[key].friendlyUniqueId}`);
   }
 
   public convertAPiGatewayAuthorizer(key: string, cfTemplate: any): void {
@@ -501,6 +502,27 @@ export class Cf2Tf extends TerraformStack {
   }
 
   public convertIamRole(key: string, cfTemplate: any): void {
+    function convertPrincipal(principal: any): DataAwsIamPolicyDocumentStatementPrincipals[] {
+      if (principal === '*') {
+        return [
+          {
+            type: 'AWS',
+            identifiers: ['*'],
+          },
+        ];
+      }
+
+      const result: DataAwsIamPolicyDocumentStatementPrincipals[] = [];
+      _.forOwn(principal, (value, key) => {
+        result.push({
+          type: key,
+          identifiers: value,
+        });
+      });
+
+      return result;
+    }
+
     console.log(`converting iam role ${JSON.stringify(cfTemplate)}`);
     const iamRoleProperties = cfTemplate.Properties;
 
@@ -514,14 +536,7 @@ export class Cf2Tf extends TerraformStack {
         {
           actions: typeof statement.Action === 'string' ? [statement.Action] : [...statement.Action],
           effect: statement.Effect,
-          principals: [
-            {
-              // identifiers: [statement.Principle],
-              //TODO: use variables
-              identifiers: ['*'],
-              type: 'AWS',
-            },
-          ],
+          principals: convertPrincipal(statement.Principal),
         },
       ],
     });
@@ -539,13 +554,6 @@ export class Cf2Tf extends TerraformStack {
         (statement: { Action: any; Effect: any; Principal: any; Resource: any[] }) => ({
           actions: typeof statement.Action === 'string' ? statement.Action : [...statement.Action],
           effect: statement.Effect,
-          principals: [
-            {
-              // identifiers: [statement.Principal],
-              identifiers: ['*'],
-              type: 'AWS',
-            },
-          ],
           resources: statement.Resource.map((resource: any) => this.handleResources(resource)),
         }),
       );
@@ -565,10 +573,10 @@ export class Cf2Tf extends TerraformStack {
   }
 
   public convertLambdaFunction(key: string, cfTemplate: any): void {
-    console.log(`converting lambda function ${JSON.stringify(cfTemplate)}`);
+    console.log(`converting lambda function ${key} ${JSON.stringify(cfTemplate)}`);
     const lambdaProperties = cfTemplate.Properties;
 
-    console.log(`bucket is ${lambdaProperties.Code.S3Bucket}`);
+    console.log(`bucket is ${JSON.stringify(lambdaProperties.Code.S3Bucket)}`);
     const s3Bucket = this.handleRef<S3Bucket>(lambdaProperties.Code.S3Bucket);
 
     const role = this.handleResources(lambdaProperties.Role);
@@ -588,10 +596,16 @@ export class Cf2Tf extends TerraformStack {
     });
   }
 
-  public addLambdaVersion(key: string, cfTemplate: any) {
+  public addLambdaVersion(key: string, cfTemplate: any): void {
+    console.log(`adding lambda version ${key} ${JSON.stringify(cfTemplate)}`);
+
     const versionProperties = cfTemplate.Properties;
 
-    const lambda = this.handleRef<LambdaFunction>({ Ref: versionProperties.FunctionName });
+    const functionName = versionProperties.FunctionName;
+    const lambda = this.handleRef<LambdaFunction>(functionName);
+
+    console.log(`lambda is ${lambda.friendlyUniqueId}`);
+
     lambda.publish = true;
   }
 
@@ -603,6 +617,8 @@ export class Cf2Tf extends TerraformStack {
   }
 
   public handleRef<T extends TerraformResource>({ Ref }: RefObject): T {
+    console.log(`handling ref ${Ref}`);
+
     if (!Ref) {
       // is not ref, need to process other things
       throw new Error('it is not a ref object');
