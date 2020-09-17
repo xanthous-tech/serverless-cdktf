@@ -20,6 +20,7 @@ import {
   ApiGatewayAuthorizer,
   AwsProvider,
   DataAwsIamPolicyDocumentStatementPrincipals,
+  CloudwatchEventRule,
 } from '../.gen/providers/aws';
 
 interface RefObject {
@@ -180,10 +181,26 @@ export class Cf2Tf extends TerraformStack {
       case 'AWS::Lambda::Version':
         this.addLambdaVersion(key, cfResource);
         break;
+      case 'AWS::Events::Rule':
+        this.convertAwsEventsRule(key, cfResource);
+        break;
       default:
         throw new Error(`unsupported type ${cfResource.Type}`);
     }
     // console.log(`converted resource ${key} ${this.tfResources[key].friendlyUniqueId}`);
+  }
+
+  public convertAwsEventsRule(key: string, cfTemplate: any): void {
+    console.log(`converting aws events rule`, cfTemplate);
+
+    const cfProperties = cfTemplate.Properties;
+
+    this.tfResources[key] = new CloudwatchEventRule(this, key, {
+      scheduleExpression: cfProperties.ScheduleExpression,
+      isEnabled: cfProperties.State === 'ENABLED',
+      name = cfProperties.Targets[0].Id,
+      roleArn = this.handleResources(cfProperties.Targets[0].Arn),
+    });
   }
 
   public convertAPiGatewayAuthorizer(key: string, cfTemplate: any): void {
