@@ -41,6 +41,7 @@ class ServerlessCdktfPlugin {
     // console.log(options);
     // serverless.cli.log(`noDeploy - ${this.options['noDeploy']}`);
 
+    // TODO: remove procedures
     this.hooks = {
       // 'after:package:finalize': this.convertToTerraformStack.bind(this),
       'aws:deploy:deploy:createStack': this.createTerraformStack.bind(this),
@@ -72,8 +73,8 @@ class ServerlessCdktfPlugin {
 
   private async convertToTerraformStack(stack: string): Promise<void> {
     this.serverless.cli.log(`converting Serverless CF Stack ${stack} using CDKTF...`);
-    // await createCdktfJson(this.serverless);
-    // await runCdktfGet(this.serverless);
+    await createCdktfJson(this.serverless);
+    await runCdktfGet(this.serverless);
 
     if (this.options['noDeploy'] || (this.serverless.service.provider as any).shouldNotDeploy) {
       await runCdktfSynth(this.serverless, stack);

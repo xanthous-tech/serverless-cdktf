@@ -66,6 +66,8 @@ export class Cf2Tf extends TerraformStack {
       profile: (serverless.service.provider as any).profile,
     });
 
+    // variable retrieval
+    // TODO: move deployment bucket name and partition into cdktf custom config
     const variables = this.serverless.service.custom;
     const region = this.serverless.service.provider.region || variables.defaultRegion;
     const accountId = variables.accountId;

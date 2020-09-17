@@ -3,6 +3,10 @@ import { spawn } from 'child_process';
 import fs from 'fs-extra';
 import Serverless from 'serverless';
 
+function getCdktfBinPath(serverless: Serverless): string {
+  return serverless.service.custom.cdktf.binPath || './node_modules/.bin';
+}
+
 export async function createCdktfJson(serverless: Serverless): Promise<void> {
   // serverless.cli.log('removing cdktf.out');
   // await fs.remove(path.resolve(serverlessTmpDirPath, '.gen'));
@@ -26,7 +30,7 @@ export async function runCdktfGet(serverless: Serverless): Promise<void> {
   serverless.cli.log('running cdktf get');
   return new Promise<void>((resolve, reject) => {
     //TODO: config cdktf path in this plugin options.
-    const cdktfGet = spawn(`./node_modules/.bin/cdktf`, ['get'], {
+    const cdktfGet = spawn(`${getCdktfBinPath(serverless)}/cdktf`, ['get'], {
       cwd: process.cwd(),
       stdio: 'inherit',
     });
@@ -50,8 +54,8 @@ export async function runCdktfSynth(serverless: Serverless, stack: string): Prom
   return new Promise<void>((resolve, reject) => {
     //TODO: config cdktf path in this plugin options.
     const cdktfGet = spawn(
-      `./node_modules/.bin/cdktf`,
-      ['synth', '-a', `"./node_modules/.bin/sls-cdktf --stack ${stack}"`, '-o', `./.serverless/cdktf-${stack}`],
+      `${getCdktfBinPath(serverless)}/cdktf`,
+      ['synth', '-a', `"${getCdktfBinPath(serverless)}/sls-cdktf --stack ${stack}"`, '-o', `./.serverless/cdktf-${stack}`],
       {
         cwd: process.cwd(),
         stdio: 'inherit',
@@ -77,8 +81,8 @@ export async function runCdktfDeploy(serverless: Serverless, stack: string): Pro
   return new Promise<void>((resolve, reject) => {
     //TODO: config cdktf path in this plugin options.
     const cdktfGet = spawn(
-      `./node_modules/.bin/cdktf`,
-      ['deploy', '-a', `"./node_modules/.bin/sls-cdktf --stack ${stack}"`, '-o', `./.serverless/cdktf-${stack}`, '--auto-approve'],
+      `${getCdktfBinPath(serverless)}/cdktf`,
+      ['deploy', '-a', `"${getCdktfBinPath(serverless)}/sls-cdktf --stack ${stack}"`, '-o', `./.serverless/cdktf-${stack}`, '--auto-approve'],
       {
         cwd: process.cwd(),
         stdio: 'inherit',
