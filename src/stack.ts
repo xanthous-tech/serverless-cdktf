@@ -204,7 +204,7 @@ export class Cf2Tf extends TerraformStack {
 
     const cfProperties = cfTemplate.Properties;
 
-    this.tfResources[key] = new CloudwatchEventRule(this, key, {
+    const cloudWatchEventRule = new CloudwatchEventRule(this, key, {
       name: cfProperties.Name,
       description: cfProperties.Description,
 
@@ -212,17 +212,22 @@ export class Cf2Tf extends TerraformStack {
 
       scheduleExpression: cfProperties.ScheduleExpression,
       isEnabled: cfProperties.State === 'ENABLED',
-      roleArn: this.handleResources(cfProperties.RoleArn),
+      roleArn: cfProperties.RoleArn,
     });
 
+    this.tfResources[key] = cloudWatchEventRule;
+    console.log(`converting targets !`);
+
     const targets = cfProperties.Targets;
-    targets.map((target: { id: string; Arn: any }) => {
-      new CloudwatchEventTarget(this, target.id, {
-        rule: (this.tfResources[key] as CloudwatchEventRule).name!,
+    targets.map((target: { Arn: any; Id: any }, index: number) => {
+      new CloudwatchEventTarget(this, `${target.Id}${index}`, {
+        rule: cloudWatchEventRule.id ?? '',
         arn: target.Arn,
-        targetId: target.id,
+        targetId: target.Id,
       });
     });
+
+    console.log(`aws events rule converted `);
   }
 
   public convertAPiGatewayAuthorizer(key: string, cfTemplate: any): void {
@@ -372,6 +377,22 @@ export class Cf2Tf extends TerraformStack {
     const orderedCacheBehaviors = distributionConfig.CacheBehaviors;
     const origins: any[] = cfProperties.DistributionConfig.Origins;
 
+    function convertForwardedValues(forwardedValues: any) {
+      return [
+        {
+          cookies: [
+            {
+              forward: forwardedValues.Cookies.Forward,
+              whitelistedNames: forwardedValues.Cookies.WhiteListedNames,
+            },
+          ],
+          headers: forwardedValues.Headers,
+          queryString: forwardedValues.QueryString,
+          queryStringCacheKeys: forwardedValues.QueryStringCacheKeys,
+        },
+      ];
+    }
+
     function convertDefaultCacheBehavior(defaultCacheBehavior: any): CloudfrontDistributionDefaultCacheBehavior[] {
       return [
         {
@@ -380,7 +401,7 @@ export class Cf2Tf extends TerraformStack {
           compress: defaultCacheBehavior.Compress,
           defaultTtl: defaultCacheBehavior.DefaultTTL,
           fieldLevelEncryptionId: defaultCacheBehavior.FieldLevelEncryptionId,
-          forwardedValues: defaultCacheBehavior.ForwardedValues,
+          forwardedValues: convertForwardedValues(defaultCacheBehavior.ForwardedValues),
           lambdaFunctionAssociation: defaultCacheBehavior.LambdaFunctionAssociations,
           maxTtl: defaultCacheBehavior.MaxTTL,
           minTtl: defaultCacheBehavior.MinTTL,
@@ -423,18 +444,7 @@ export class Cf2Tf extends TerraformStack {
         compress: orderedCacheBehavior.Compress,
         defaultTtl: parseInt(orderedCacheBehavior.DefaultTTL),
         fieldLevelEncryptionId: orderedCacheBehavior.FieldLevelEncryptionId,
-        forwardedValues: [
-          {
-            cookies: [
-              {
-                forward: orderedCacheBehavior.ForwardedValues.Cookies.Forward,
-              },
-            ],
-            headers: orderedCacheBehavior.ForwardedValues.Headers,
-            queryString: orderedCacheBehavior.ForwardedValues.QueryString,
-            queryStringCacheKeys: orderedCacheBehavior.ForwardedValues.QueryStringCacheKeys,
-          },
-        ],
+        forwardedValues: convertForwardedValues(orderedCacheBehavior.ForwardedValues),
 
         lambdaFunctionAssociation: orderedCacheBehavior.LambdaFunctionAssociations?.map(
           (lambda: { EventType: any; LambdaFunctionARN: any; IncludeBody: any }) => ({
@@ -741,6 +751,8 @@ export class Cf2Tf extends TerraformStack {
       // is not ref, need to process other things
       throw new Error('it is not a ref object');
     }
+
+    console.log(`ref is ${this.tfResources[Ref]}`);
 
     if (!this.tfResources[Ref] && this.cfResources[Ref]) {
       this.convertCfResource(Ref, this.cfResources[Ref]);
