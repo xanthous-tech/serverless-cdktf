@@ -22,6 +22,12 @@ import {
   DataAwsIamPolicyDocumentStatementPrincipals,
   CloudwatchEventRule,
   CloudwatchEventTarget,
+  ApiGatewayIntegration,
+  ApiGatewayMethodResponse,
+  ApiGatewayIntegrationResponse,
+  CloudfrontDistributionDefaultCacheBehavior,
+  CloudfrontDistributionRestrictions,
+  CloudfrontDistributionOrderedCacheBehavior,
 } from '../.gen/providers/aws';
 
 interface RefObject {
@@ -268,29 +274,67 @@ export class Cf2Tf extends TerraformStack {
     console.log(cfProperties);
 
     const apiGatewaymethod = new ApiGatewayMethod(this, key, {
-      httpMethod: cfProperties.HttpMethod,
-      requestParameters: cfProperties.RequestParameters,
-      resourceId: this.handleResources(cfProperties.ResourceId),
       restApiId: this.handleResources(cfProperties.RestApiId),
-
-      apiKeyRequired: cfProperties.ApiKeyRequired,
+      resourceId: this.handleResources(cfProperties.ResourceId),
+      httpMethod: cfProperties.HttpMethod,
       authorization: cfProperties.AuthorizationType,
-
       authorizerId: this.handleResources(cfProperties.AuthorizerId),
+      authorizationScopes: cfProperties.AuthorizationScopes,
+      apiKeyRequired: cfProperties.ApiKeyRequired,
+      requestModels: cfProperties.RequestModels,
+      requestValidatorId: this.handleResources(cfProperties.RequestValidatorId),
+      requestParameters: cfProperties.RequestParameters,
     });
 
     console.log(apiGatewaymethod);
 
     this.tfResources[key] = apiGatewaymethod;
 
-    const response = cfProperties.Integration;
+    const methodResponses: [any] = cfProperties.MethodResponses;
+    methodResponses.map((response) => {
+      return new ApiGatewayMethodResponse(this, `${key}Response${response.StatusCode}`, {
+        restApiId: this.handleResources(cfProperties.RestApiId),
+        resourceId: this.handleResources(cfProperties.ResourceId),
+        httpMethod: cfProperties.HttpMethod,
+        statusCode: response.StatusCode,
+        responseModels: response.ResponseModels,
+        responseParameters: response.ResponseParameters,
+      });
+    });
 
-    //TODO:fix this.  not completely match.
-    //TODO: create response method https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/api_gateway_integration_response
-    // new ApiGatewayGatewayResponse(this, `${key}_response`, {
-    //   restApiId: apiGatewaymethod.id!,
-    //   responseType: response.Type,
-    // });
+    const intergration = cfProperties.Integration;
+
+    new ApiGatewayIntegration(this, `${key}Integration`, {
+      restApiId: this.handleResources(cfProperties.RestApiId),
+      resourceId: this.handleResources(cfProperties.ResourceId),
+      httpMethod: cfProperties.HttpMethod,
+      integrationHttpMethod: intergration.IntegrationHttpMethod,
+      type: intergration.Type,
+      connectionType: intergration.ConnectionType,
+      connectionId: intergration.ConnectionId,
+      uri: intergration.Uri,
+      credentials: intergration.Credentials,
+      requestTemplates: intergration.RequestTemplates,
+      requestParameters: intergration.RequestParameters,
+      passthroughBehavior: intergration.PassthroughBehavior,
+      cacheKeyParameters: intergration.CacheKeyParameters,
+      cacheNamespace: intergration.CacheNamespace,
+      contentHandling: intergration.ContentHandling,
+      timeoutMilliseconds: intergration.TimeoutInMillis,
+    });
+
+    const integrationResponses: [any] = intergration.IntegrationResponses;
+    integrationResponses.map((response, index) => {
+      return new ApiGatewayIntegrationResponse(this, `${key}Response${index}`, {
+        restApiId: this.handleResources(cfProperties.RestApiId),
+        resourceId: this.handleResources(cfProperties.ResourceId),
+        httpMethod: cfProperties.HttpMethod,
+        statusCode: response.StatusCode,
+        selectionPattern: response.SelectionPattern,
+        responseTemplates: response.responseTemplates,
+        contentHandling: response.SelectionPattern,
+      });
+    });
   }
 
   public convertApiGatewayResource(key: string, cfTemplate: any): void {
@@ -324,89 +368,129 @@ export class Cf2Tf extends TerraformStack {
 
     const cfProperties = cfTemplate.Properties;
     const distributionConfig = cfProperties.DistributionConfig;
-    const cacheBehaviors = distributionConfig.CacheBehaviors;
-    const defaultCacheBehavior = distributionConfig.defaultCacheBehavior;
+    const defaultCacheBehavior = distributionConfig.DefaultCacheBehavior;
+    const orderedCacheBehaviors = distributionConfig.CacheBehaviors;
     const origins: any[] = cfProperties.DistributionConfig.Origins;
 
+    function convertDefaultCacheBehavior(defaultCacheBehavior: any): CloudfrontDistributionDefaultCacheBehavior[] {
+      return [
+        {
+          allowedMethods: defaultCacheBehavior.AllowedMethods,
+          cachedMethods: defaultCacheBehavior.CachedMethods,
+          compress: defaultCacheBehavior.Compress,
+          defaultTtl: defaultCacheBehavior.DefaultTTL,
+          fieldLevelEncryptionId: defaultCacheBehavior.FieldLevelEncryptionId,
+          forwardedValues: defaultCacheBehavior.ForwardedValues,
+          lambdaFunctionAssociation: defaultCacheBehavior.LambdaFunctionAssociations,
+          maxTtl: defaultCacheBehavior.MaxTTL,
+          minTtl: defaultCacheBehavior.MinTTL,
+          smoothStreaming: defaultCacheBehavior.SmoothStreaming,
+          targetOriginId: defaultCacheBehavior.TargetOriginId,
+          trustedSigners: defaultCacheBehavior.TrustedSigners,
+          viewerProtocolPolicy: defaultCacheBehavior.ViewerProtocolPolicy,
+        },
+      ];
+    }
+
+    function convertRestrictions(restrictions: any): CloudfrontDistributionRestrictions[] {
+      if (!restrictions) {
+        return [
+          {
+            geoRestriction: [
+              {
+                restrictionType: 'none',
+              },
+            ],
+          },
+        ];
+      }
+      return [
+        {
+          geoRestriction: [
+            {
+              locations: restrictions.GeoRestriction?.Locations,
+              restrictionType: restrictions.GeoRestriction?.RestrictionType,
+            },
+          ],
+        },
+      ];
+    }
+
+    function convertOrderedCacheBehavior(cachedBehaviors: [any]): CloudfrontDistributionOrderedCacheBehavior[] {
+      return cachedBehaviors.map((orderedCacheBehavior) => ({
+        allowedMethods: orderedCacheBehavior.AllowedMethods,
+        cachedMethods: orderedCacheBehavior.CachedMethods,
+        compress: orderedCacheBehavior.Compress,
+        defaultTtl: parseInt(orderedCacheBehavior.DefaultTTL),
+        fieldLevelEncryptionId: orderedCacheBehavior.FieldLevelEncryptionId,
+        forwardedValues: [
+          {
+            cookies: [
+              {
+                forward: orderedCacheBehavior.ForwardedValues.Cookies.Forward,
+              },
+            ],
+            headers: orderedCacheBehavior.ForwardedValues.Headers,
+            queryString: orderedCacheBehavior.ForwardedValues.QueryString,
+            queryStringCacheKeys: orderedCacheBehavior.ForwardedValues.QueryStringCacheKeys,
+          },
+        ],
+
+        lambdaFunctionAssociation: orderedCacheBehavior.LambdaFunctionAssociations?.map(
+          (lambda: { EventType: any; LambdaFunctionARN: any; IncludeBody: any }) => ({
+            eventType: lambda.EventType,
+            lambdaArn: lambda.LambdaFunctionARN,
+            includeBody: lambda.IncludeBody,
+          }),
+        ),
+
+        maxTtl: parseInt(orderedCacheBehavior.MaxTTL),
+        minTtl: parseInt(orderedCacheBehavior.MinTTL),
+        pathPattern: orderedCacheBehavior.PathPattern,
+        smoothStreaming: orderedCacheBehavior.SmoothStreaming,
+        targetOriginId: orderedCacheBehavior.TargetOriginId,
+        trustedSigners: orderedCacheBehavior.TrustedSigners,
+        viewerProtocolPolicy: orderedCacheBehavior.ViewerProtocolPolicy,
+      }));
+    }
+
     this.tfResources[key] = new CloudfrontDistribution(this, key, {
+      aliases: distributionConfig.Aliases,
+      comment: distributionConfig.Comment,
+      customErrorResponse: distributionConfig.CustomErrorResponses,
+
+      defaultCacheBehavior: convertDefaultCacheBehavior(defaultCacheBehavior),
+      defaultRootObject: distributionConfig.DefaultRootObject,
+      enabled: distributionConfig.Enabled,
+      isIpv6Enabled: distributionConfig.IPV6Enabled,
+      httpVersion: distributionConfig.HttpVersion,
+      loggingConfig: [
+        {
+          bucket: distributionConfig.Logging?.bucket,
+          includeCookies: distributionConfig.Logging?.includeCookies,
+          prefix: distributionConfig.Logging?.prefix,
+        },
+      ],
       origin: origins.map((origin) => ({
         originId: origin.Id,
         domainName: this.handleResources(origin.DomainName),
       })),
-      enabled: distributionConfig.Enabled,
-      httpVersion: distributionConfig.HttpVersion,
-      comment: distributionConfig.Comment,
-      aliases: distributionConfig.Aliases,
       priceClass: distributionConfig.PriceClass,
-      defaultRootObject: distributionConfig.DefaultRootObject,
-      defaultCacheBehavior: [
-        {
-          allowedMethods: distributionConfig.DefaultCacheBehavior.AllowedMethods,
-          cachedMethods: cacheBehaviors.CachedMethods,
-          targetOriginId: distributionConfig.DefaultCacheBehavior.TargetOriginId,
-          compress: distributionConfig.DefaultCacheBehavior.Compress,
-          forwardedValues: [
-            {
-              queryString: distributionConfig.DefaultCacheBehavior.ForwardedValues.QueryString,
-              cookies: [
-                {
-                  forward: distributionConfig.DefaultCacheBehavior.ForwardedValues.Cookies.Forward,
-                },
-              ],
-            },
-          ],
-          viewerProtocolPolicy: defaultCacheBehavior.ViewerProtocolPolicy,
-        },
-      ],
-      orderedCacheBehavior: distributionConfig.CacheBehaviors.map(
-        (cache: {
-          AllowedMethods: any;
-          CachedMethods: any;
-          ForwardedValues: { QueryString: any; Headers: any; Cookies: { Forward: any } };
-          MinTTL: string;
-          DefaultTTL: string;
-          TargetOriginId: any;
-          ViewerProtocolPolicy: any;
-          PathPattern: any;
-        }) => ({
-          allowedMethods: cache.AllowedMethods,
-          cachedMethods: cache.CachedMethods,
-          forwardedValues: [
-            {
-              queryString: cache.ForwardedValues.QueryString,
-              headers: cache.ForwardedValues.Headers,
-              cookies: [
-                {
-                  forward: cache.ForwardedValues.Cookies.Forward,
-                },
-              ],
-            },
-          ],
-          minTtl: parseInt(cache.MinTTL),
-          defaultTtl: parseInt(cache.DefaultTTL),
-          targetOriginId: cache.TargetOriginId,
-          viewerProtocolPolicy: cache.ViewerProtocolPolicy,
-          PathPattern: cache.PathPattern,
-        }),
-      ),
+      restrictions: convertRestrictions(distributionConfig.Restrictions),
 
       viewerCertificate: [
         {
           acmCertificateArn: distributionConfig.ViewerCertificate.AcmCertificateArn,
+          cloudfrontDefaultCertificate: distributionConfig.ViewerCertificate.CloudFrontDefaultCertificate,
+          iamCertificateId: distributionConfig.ViewerCertificate.IamCertificateId,
+          minimumProtocolVersion: distributionConfig.ViewerCertificate.MinimumProtocolVersion,
           sslSupportMethod: distributionConfig.ViewerCertificate.SslSupportMethod,
         },
       ],
 
-      //TODO: don't know what is restrictions.
-      restrictions: [
-        {
-          geoRestriction: [
-            {
-              restrictionType: 'none',
-            },
-          ],
-        },
-      ],
+      webAclId: distributionConfig.WebACLId,
+
+      orderedCacheBehavior: convertOrderedCacheBehavior(orderedCacheBehaviors),
     });
   }
 
