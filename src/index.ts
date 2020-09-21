@@ -36,17 +36,19 @@ class ServerlessCdktfPlugin {
     // console.log(pluginHooks['aws:deploy:deploy:createStack']);
     // console.log(pluginHooks['aws:deploy:deploy:updateStack']);
 
-    //Set noDeploy config
-    // this.options['noDeploy'] = true;
-    // console.log(options);
-    // serverless.cli.log(`noDeploy - ${this.options['noDeploy']}`);
-
     // TODO: remove procedures
     this.hooks = {
       // 'after:package:finalize': this.convertToTerraformStack.bind(this),
       'aws:deploy:deploy:createStack': this.createTerraformStack.bind(this),
       'aws:deploy:deploy:updateStack': this.convertToTerraformStack.bind(this, 'update-stack'),
     };
+
+    // find fullstack-serverless plugin and disable the distribution invalidation step
+    const fullstackServerlessPlugin: any = serverless.pluginManager.plugins.find((plugin) => plugin.constructor.name === 'ServerlessFullstackPlugin');
+    if (fullstackServerlessPlugin) {
+      serverless.cli.log('disabling distribution invalidation in fullstack-serverless, you may need to invalidate yourself');
+      fullstackServerlessPlugin.cliOptions['invalidate-distribution'] = false;
+    }
   }
 
   private async createTerraformStack(): Promise<void> {
