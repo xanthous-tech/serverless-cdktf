@@ -12,7 +12,7 @@
     "target": "es2015",
     "sourceMap": true,
     "outDir": "./lib",
-    "noUnusedLocals": true,
+    "noUnusedLocals": false,
     "noImplicitAny": true,
     "strictNullChecks": true,
     "skipLibCheck": true,

@@ -1,6 +1,20 @@
-# Serverless CDKTF
+# serverless-cdktf
 
-## How to build ?
+A [serverless](https://serverless.com) plugin that deploys AWS serverless stack via Terraform, using [CDKTF](https://github.com/hashicorp/terraform-cdk).
 
-1. using `yarn install` to install packages and get cdktf packages .
-2. run compile `yarn run compile`
+# Usage
+
+```shell
+yarn add serverless-cdktf --dev
+```
+
+just add the plugin into the `plugins` field in `serverless.yml` and it will do the rest.
+
+# Resources Supported
+
+- [x] S3 Bucket
+- [X] S3 Bucket Policy
+
+# License
+
+[MIT](./LICENSE).
