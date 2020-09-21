@@ -1,12 +1,12 @@
 diff --git a/node_modules/@types/serverless/classes/PluginManager.d.ts b/node_modules/@types/serverless/classes/PluginManager.d.ts
-index 4990b37..2242474 100644
+index 4990b37..a245704 100644
 --- a/node_modules/@types/serverless/classes/PluginManager.d.ts
 +++ b/node_modules/@types/serverless/classes/PluginManager.d.ts
 @@ -15,6 +15,7 @@ declare class PluginManager {
      loadCommand(pluginName: string, details: {}, key: string): {};
      loadCommands(pluginInstance: Plugin): void;
      spawn(commandsArray: string | string[], options?: any): Promise<void>;
-+    validateCommand(commands: Serverless.processedInput)
++    validateCommand(commands?: Serverless.processedInput)
  
      cliOptions: {};
      cliCommands: {};

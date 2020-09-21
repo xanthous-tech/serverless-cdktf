@@ -28,6 +28,7 @@ import {
   CloudfrontDistributionDefaultCacheBehavior,
   CloudfrontDistributionRestrictions,
   CloudfrontDistributionOrderedCacheBehavior,
+  CloudfrontDistributionLoggingConfig,
 } from '../.gen/providers/aws';
 
 interface RefObject {
@@ -223,7 +224,7 @@ export class Cf2Tf extends TerraformStack {
     targets.map((target: { Arn: any; Id: any }, index: number) => {
       new CloudwatchEventTarget(this, `${target.Id}${index}`, {
         rule: cloudWatchEventRule.id ?? '',
-        arn: target.Arn,
+        arn: this.handleResources(target.Arn),
         targetId: target.Id,
       });
     });
@@ -270,9 +271,7 @@ export class Cf2Tf extends TerraformStack {
   }
 
   public convertAPiGatewayMethod(key: string, cfTemplate: any): void {
-    console.log(`-----------------------------`);
     console.log('converting api gateway method', key, cfTemplate);
-    console.log(`-----------------------------`);
 
     const cfProperties = cfTemplate.Properties;
     console.log(cfProperties);
@@ -314,7 +313,7 @@ export class Cf2Tf extends TerraformStack {
       type: intergration.Type,
       connectionType: intergration.ConnectionType,
       connectionId: intergration.ConnectionId,
-      uri: intergration.Uri,
+      uri: this.handleResources(intergration.Uri),
       credentials: intergration.Credentials,
       requestTemplates: intergration.RequestTemplates,
       requestParameters: intergration.RequestParameters,
@@ -394,7 +393,7 @@ export class Cf2Tf extends TerraformStack {
       return [
         {
           allowedMethods: defaultCacheBehavior.AllowedMethods,
-          cachedMethods: defaultCacheBehavior.CachedMethods,
+          cachedMethods: defaultCacheBehavior.CachedMethods ?? ['GET', 'HEAD'],
           compress: defaultCacheBehavior.Compress,
           defaultTtl: defaultCacheBehavior.DefaultTTL,
           fieldLevelEncryptionId: defaultCacheBehavior.FieldLevelEncryptionId,
@@ -461,6 +460,17 @@ export class Cf2Tf extends TerraformStack {
       }));
     }
 
+    function convertLoggingConfig(logging: any): CloudfrontDistributionLoggingConfig[] {
+      if (!logging) return [];
+      return [
+        {
+          bucket: logging?.Bucket,
+          includeCookies: logging?.IncludeCookies,
+          prefix: logging?.Prefix,
+        },
+      ];
+    }
+
     this.tfResources[key] = new CloudfrontDistribution(this, key, {
       aliases: distributionConfig.Aliases,
       comment: distributionConfig.Comment,
@@ -471,13 +481,7 @@ export class Cf2Tf extends TerraformStack {
       enabled: distributionConfig.Enabled,
       isIpv6Enabled: distributionConfig.IPV6Enabled,
       httpVersion: distributionConfig.HttpVersion,
-      loggingConfig: [
-        {
-          bucket: distributionConfig.Logging?.bucket,
-          includeCookies: distributionConfig.Logging?.includeCookies,
-          prefix: distributionConfig.Logging?.prefix,
-        },
-      ],
+      loggingConfig: convertLoggingConfig(distributionConfig.Logging),
       origin: origins.map((origin) => ({
         originId: origin.Id,
         domainName: this.handleResources(origin.DomainName),
