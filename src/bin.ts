@@ -18,6 +18,12 @@ const argv = yargs.option('s', {
   const serverless = new Serverless();
   await serverless.init();
 
+  serverless.pluginManager.validateCommand(serverless.processedInput.commands);
+  await serverless.variables.populateService(serverless.pluginManager.cliOptions);
+  serverless.service.mergeArrays();
+  serverless.service.setFunctionNames(serverless.processedInput.options);
+  serverless.service.validate();
+
   const stackName = `${serverless.service.getServiceName()}-${serverless.service.provider.stage}`;
 
   const app = new App();
