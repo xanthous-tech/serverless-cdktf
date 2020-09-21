@@ -29,6 +29,7 @@ import {
   CloudfrontDistributionRestrictions,
   CloudfrontDistributionOrderedCacheBehavior,
   CloudfrontDistributionLoggingConfig,
+  CloudfrontDistributionOrigin,
 } from '../.gen/providers/aws';
 
 interface RefObject {
@@ -129,6 +130,8 @@ export class Cf2Tf extends TerraformStack {
       const cfResource = this.cfResources[key];
       this.convertCfResource(key, cfResource);
     }
+
+    console.log('convert CF resources done');
   }
 
   private getRefMap(ref: string): string {
@@ -276,16 +279,6 @@ export class Cf2Tf extends TerraformStack {
     const cfProperties = cfTemplate.Properties;
     console.log(cfProperties);
 
-    function convertRequestParameters(parameters: any): { [key: string]: boolean } {
-      const a: { [key: string]: boolean } = {};
-      if (!parameters) return a;
-      _.forOwn(parameters, (value: boolean, key: string) => {
-        a[key] = value;
-      });
-
-      return a;
-    }
-
     const apiGatewayMethod = new ApiGatewayMethod(this, key, {
       restApiId: this.handleResources(cfProperties.RestApiId),
       resourceId: this.handleResources(cfProperties.ResourceId),
@@ -296,8 +289,12 @@ export class Cf2Tf extends TerraformStack {
       apiKeyRequired: cfProperties.ApiKeyRequired,
       requestModels: cfProperties.RequestModels,
       requestValidatorId: this.handleResources(cfProperties.RequestValidatorId),
-      requestParameters: convertRequestParameters(cfProperties.RequestParameters),
     });
+
+    if (cfProperties.RequestParameters) {
+      // https://github.com/hashicorp/terraform-cdk/issues/235#issuecomment-662942782
+      apiGatewayMethod.addOverride('request_parameters', cfProperties.RequestParameters);
+    }
 
     this.tfResources[key] = apiGatewayMethod;
 
@@ -492,10 +489,22 @@ export class Cf2Tf extends TerraformStack {
       isIpv6Enabled: distributionConfig.IPV6Enabled,
       httpVersion: distributionConfig.HttpVersion,
       loggingConfig: convertLoggingConfig(distributionConfig.Logging),
-      origin: origins.map((origin) => ({
-        originId: origin.Id,
-        domainName: this.handleResources(origin.DomainName),
-      })),
+      origin: origins.map(
+        (origin) =>
+          ({
+            originId: origin.Id,
+            domainName: this.handleResources(origin.DomainName),
+            customOriginConfig: [
+              {
+                httpPort: 80,
+                httpsPort: 443,
+                // TODO: fix this specific check
+                originProtocolPolicy: origin.Id === 'ApiGateway' ? 'https-only' : 'http-only',
+                originSslProtocols: ['TLSv1', 'TLSv1.1', 'TLSv1.2'],
+              },
+            ],
+          } as CloudfrontDistributionOrigin),
+      ),
       priceClass: distributionConfig.PriceClass,
       restrictions: convertRestrictions(distributionConfig.Restrictions),
 
@@ -527,6 +536,15 @@ export class Cf2Tf extends TerraformStack {
       this.tfResources[key] = new S3Bucket(this, key, {
         // TODO: this is not flexible enough to handle the BucketEncryption list
         bucket: bucketProperties.BucketName,
+        // TODO: not the full website conversion
+        website: !bucketProperties.WebsiteConfiguration
+          ? undefined
+          : [
+              {
+                indexDocument: bucketProperties.WebsiteConfiguration?.IndexDocument,
+                errorDocument: bucketProperties.WebsiteConfiguration?.ErrorDocument,
+              },
+            ],
         serverSideEncryptionConfiguration: [
           {
             rule: [
