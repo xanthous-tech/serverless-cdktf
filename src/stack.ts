@@ -196,7 +196,8 @@ export class Cf2Tf extends TerraformStack {
       default:
         throw new Error(`unsupported type ${cfResource.Type}`);
     }
-    // console.log(`converted resource ${key} ${this.tfResources[key].friendlyUniqueId}`);
+
+    console.log(`converted resource ${key} ${this.tfResources[key].friendlyUniqueId}`);
   }
 
   public convertAwsEventsRule(key: string, cfTemplate: any): void {
@@ -266,8 +267,6 @@ export class Cf2Tf extends TerraformStack {
       principal: cfProperties.Principal,
       sourceArn: this.handleResources(cfProperties.SourceArn),
     });
-
-    console.log(`converted lambda permission`, key, this.tfResources[key]);
   }
 
   public convertAPiGatewayMethod(key: string, cfTemplate: any): void {
@@ -278,7 +277,7 @@ export class Cf2Tf extends TerraformStack {
     const cfProperties = cfTemplate.Properties;
     console.log(cfProperties);
 
-    const apiGatewaymethod = new ApiGatewayMethod(this, key, {
+    const apiGatewayMethod = new ApiGatewayMethod(this, key, {
       restApiId: this.handleResources(cfProperties.RestApiId),
       resourceId: this.handleResources(cfProperties.ResourceId),
       httpMethod: cfProperties.HttpMethod,
@@ -291,11 +290,9 @@ export class Cf2Tf extends TerraformStack {
       requestParameters: cfProperties.RequestParameters,
     });
 
-    console.log(apiGatewaymethod);
+    this.tfResources[key] = apiGatewayMethod;
 
-    this.tfResources[key] = apiGatewaymethod;
-
-    const methodResponses: [any] = cfProperties.MethodResponses;
+    const methodResponses: any[] = cfProperties.MethodResponses || [];
     methodResponses.map((response) => {
       return new ApiGatewayMethodResponse(this, `${key}Response${response.StatusCode}`, {
         restApiId: this.handleResources(cfProperties.RestApiId),
@@ -328,7 +325,7 @@ export class Cf2Tf extends TerraformStack {
       timeoutMilliseconds: intergration.TimeoutInMillis,
     });
 
-    const integrationResponses: [any] = intergration.IntegrationResponses;
+    const integrationResponses: any[] = intergration.IntegrationResponses || [];
     integrationResponses.map((response, index) => {
       return new ApiGatewayIntegrationResponse(this, `${key}Response${index}`, {
         restApiId: this.handleResources(cfProperties.RestApiId),
@@ -437,7 +434,7 @@ export class Cf2Tf extends TerraformStack {
       ];
     }
 
-    function convertOrderedCacheBehavior(cachedBehaviors: [any]): CloudfrontDistributionOrderedCacheBehavior[] {
+    function convertOrderedCacheBehavior(cachedBehaviors: any[]): CloudfrontDistributionOrderedCacheBehavior[] {
       return cachedBehaviors.map((orderedCacheBehavior) => ({
         allowedMethods: orderedCacheBehavior.AllowedMethods,
         cachedMethods: orderedCacheBehavior.CachedMethods,
