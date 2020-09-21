@@ -276,6 +276,16 @@ export class Cf2Tf extends TerraformStack {
     const cfProperties = cfTemplate.Properties;
     console.log(cfProperties);
 
+    function convertRequestParameters(parameters: any): { [key: string]: boolean } {
+      const a: { [key: string]: boolean } = {};
+      if (!parameters) return a;
+      _.forOwn(parameters, (value: boolean, key: string) => {
+        a[key] = value;
+      });
+
+      return a;
+    }
+
     const apiGatewayMethod = new ApiGatewayMethod(this, key, {
       restApiId: this.handleResources(cfProperties.RestApiId),
       resourceId: this.handleResources(cfProperties.ResourceId),
@@ -286,7 +296,7 @@ export class Cf2Tf extends TerraformStack {
       apiKeyRequired: cfProperties.ApiKeyRequired,
       requestModels: cfProperties.RequestModels,
       requestValidatorId: this.handleResources(cfProperties.RequestValidatorId),
-      requestParameters: cfProperties.RequestParameters,
+      requestParameters: convertRequestParameters(cfProperties.RequestParameters),
     });
 
     this.tfResources[key] = apiGatewayMethod;
