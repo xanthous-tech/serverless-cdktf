@@ -14,6 +14,10 @@ just add the plugin into the `plugins` field in `serverless.yml` and it will do 
 
 - [x] S3 Bucket
 - [X] S3 Bucket Policy
+- [X] Lambda Functions
+- [X] IAM Roles and Policy Documents
+- [X] API Gateway
+- [X] CloudFront Distribution
 
 # License
 
