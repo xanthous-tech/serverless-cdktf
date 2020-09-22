@@ -81,6 +81,7 @@ export class Cf2Tf extends TerraformStack {
     const region = this.serverless.service.provider.region || variables.defaultRegion;
     const accountId = variables.accountId;
     const partition = 'aws';
+    const urlSuffix = 'amazonaws.com';
 
     this.deployBucketName = variables.deploymentBucketName;
 
@@ -91,6 +92,7 @@ export class Cf2Tf extends TerraformStack {
       'AWS::Region': region,
       'AWS::Partition': partition,
       'AWS::AccountId': accountId,
+      'AWS::URLSuffix': urlSuffix,
     };
 
     new S3Backend(this, {
@@ -102,21 +104,28 @@ export class Cf2Tf extends TerraformStack {
     });
 
     this.convertCfResources();
-    // this.convertCfOutputs();
+    this.convertCfOutputs();
   }
 
   private convertCfOutputs(): void {
     console.log(`converting outputs ${JSON.stringify(this.cfOutputs)}`);
     for (const key in this.cfOutputs) {
-      console.log(`converting ${key}`);
+      console.log(`converting key:${key}`);
       if (!Object.prototype.hasOwnProperty.call(this.cfOutputs, key)) {
         continue;
       }
 
       const cfOutput = this.cfOutputs[key];
-      this.tfOutputs[key] = new TerraformOutput(this, key, {
-        value: this.handleResources(cfOutput.Value),
+
+      this.tfOutputs[key] = new TerraformOutput(this, `Output${key}`, {
+        value: 'empty_to_replace',
+        description: cfOutput.Description,
       });
+
+      const value = this.handleResources(cfOutput.Value);
+
+      this.tfOutputs[key].addOverride('value', value);
+
       console.log(`output ${key} converted`);
     }
   }
