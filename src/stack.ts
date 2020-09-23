@@ -117,6 +117,9 @@ export class Cf2Tf extends TerraformStack {
 
       const cfOutput = this.cfOutputs[key];
 
+      //TODO: maybe fix this later.
+      //1. there's no sensitive in cloudformation outputs
+      //2. there's export:name in cloudformation.
       this.tfOutputs[key] = new TerraformOutput(this, `Output${key}`, {
         value: 'empty_to_replace',
         description: cfOutput.Description,
