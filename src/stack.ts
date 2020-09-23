@@ -86,7 +86,7 @@ export class Cf2Tf extends TerraformStack {
     this.deployBucketName = variables.deploymentBucketName;
 
     const stateBucket = variables.s3backend.bucket;
-    const stateKey = variables.s3backend.stateKey;
+    const stateKey = variables.s3backend.key;
 
     console.log(`Bucket Name is ${stateBucket}`);
     console.log(`Terraform state ${stateKey}`);
