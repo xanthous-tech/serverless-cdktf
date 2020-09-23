@@ -85,8 +85,11 @@ export class Cf2Tf extends TerraformStack {
 
     this.deployBucketName = variables.deploymentBucketName;
 
-    console.log(`Bucket Name is ${this.deployBucketName}`);
-    console.log(`Terraform state ${name}`);
+    const stateBucket = variables.s3backend.bucket;
+    const stateKey = variables.s3backend.stateKey;
+
+    console.log(`Bucket Name is ${stateBucket}`);
+    console.log(`Terraform state ${stateKey}`);
 
     this.refMaps = {
       'AWS::Region': region,
@@ -99,8 +102,10 @@ export class Cf2Tf extends TerraformStack {
       region: serverless.service.provider.region,
       profile: (serverless.service.provider as any).profile,
       // TODO: make bucket configurable
-      bucket: 'asu-terraform-state',
-      key: name,
+      // bucket: 'asu-terraform-state',
+      // key: name,
+      bucket: stateBucket,
+      key: stateKey,
     });
 
     this.convertCfResources();
