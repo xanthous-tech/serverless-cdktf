@@ -1,5 +1,5 @@
 import Serverless from 'serverless';
-import { TerraformStack, TerraformOutput, TerraformResource, S3Backend } from 'cdktf';
+import { TerraformStack, TerraformOutput, TerraformResource, S3Backend, DataTerraformRemoteState, DataTerraformRemoteStateS3 } from 'cdktf';
 import { Construct } from 'constructs';
 import _ from 'lodash';
 
@@ -60,6 +60,8 @@ export class Cf2Tf extends TerraformStack {
   public resourceRefTypeMap: {
     [key: string]: string;
   };
+
+  public remoteState: DataTerraformRemoteState;
 
   constructor(scope: Construct, name: string, public serverless: Serverless, cfTemplate: any) {
     super(scope, name);
@@ -853,9 +855,29 @@ export class Cf2Tf extends TerraformStack {
         return this.convertFnSplit(resources[key]);
       case 'Fn::Select':
         return this.convertFnSelect(resources[key]);
+      case 'CDKTF::RemoteData':
+        return this.convertRemoteData(resources[key]);
       default:
         throw new Error(`cannot find key ${key}`);
     }
+  }
+
+  /**
+   * 形式是这样的 value -> import value
+   *
+   */
+  public convertRemoteData(output: any): string {
+    //如果形式是 string，那么直接返回？
+    //1. read data from remote state
+    if (!this.remoteState) {
+      this.remoteState = new DataTerraformRemoteStateS3(this, 'remoteState', {
+        //TODO: make it configurable.
+        bucket: '',
+        key: '',
+      });
+    }
+
+    return this.remoteState.get(output);
   }
 
   public convertGetAtt(data: any[]): string {
