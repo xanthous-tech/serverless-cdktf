@@ -30,7 +30,6 @@ import {
   CloudfrontDistributionOrderedCacheBehavior,
   CloudfrontDistributionLoggingConfig,
   CloudfrontDistributionOrigin,
-  LambdaFunctionEnvironment,
 } from '../.gen/providers/aws';
 
 interface RefObject {
@@ -109,6 +108,13 @@ export class Cf2Tf extends TerraformStack {
       // key: name,
       bucket: stateBucket,
       key: stateKey,
+    });
+
+    this.remoteState = new DataTerraformRemoteStateS3(this, 'remoteState', {
+      region: serverless.service.provider.region,
+      profile: (serverless.service.provider as any).profile,
+      bucket: 'asu-terraform-state',
+      key: 'asu/terraform.tfstate',
     });
 
     this.convertCfResources();
@@ -758,16 +764,12 @@ export class Cf2Tf extends TerraformStack {
 
     const role = this.handleResources(lambdaProperties.Role);
 
-    const env = lambdaProperties.Environment ?? [];
+    const env = lambdaProperties.Environment.Variables;
 
-    //TODO: fix env.
-    const environment: LambdaFunctionEnvironment[] = env.map((arg: any) => {
-      const variable: any = {};
-      const key = _.keys(arg)[0];
-
-      variable[key] = this.handleResources(arg);
-      return variable;
-    });
+    const variables = Object.keys(env).reduce((acc: { [key: string]: string }, key) => {
+      acc[key] = this.handleResources(env[key]);
+      return acc;
+    }, {});
 
     this.tfResources[key] = new LambdaFunction(this, key, {
       s3Bucket: s3Bucket.bucket,
@@ -778,9 +780,11 @@ export class Cf2Tf extends TerraformStack {
       role: role,
       runtime: lambdaProperties.Runtime,
       timeout: lambdaProperties.Timeout,
-
-      environment: environment,
     });
+
+    if (!_.isEmpty(variables)) {
+      this.tfResources[key].addOverride('environment', [{ variables }]);
+    }
   }
 
   public addLambdaVersion(key: string, cfTemplate: any): void {
@@ -879,12 +883,9 @@ export class Cf2Tf extends TerraformStack {
    */
   public convertRemoteData(output: any): string {
     //如果形式是 string，那么直接返回？
-    //1. read data from remote state
+
     if (!this.remoteState) {
-      this.remoteState = new DataTerraformRemoteStateS3(this, 'remoteState', {
-        bucket: 'asu-terraform-state',
-        key: 'asu/terraform.tfstate',
-      });
+      throw new Error('invalid remote state');
     }
 
     return this.remoteState.get(output);
