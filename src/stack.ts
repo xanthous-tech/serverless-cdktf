@@ -30,6 +30,7 @@ import {
   CloudfrontDistributionOrderedCacheBehavior,
   CloudfrontDistributionLoggingConfig,
   CloudfrontDistributionOrigin,
+  LambdaFunctionEnvironment,
 } from '../.gen/providers/aws';
 
 interface RefObject {
@@ -757,6 +758,17 @@ export class Cf2Tf extends TerraformStack {
 
     const role = this.handleResources(lambdaProperties.Role);
 
+    const env = lambdaProperties.Environment ?? [];
+
+    //TODO: fix env.
+    const environment: LambdaFunctionEnvironment[] = env.map((arg: any) => {
+      const variable: any = {};
+      const key = _.keys(arg)[0];
+
+      variable[key] = this.handleResources(arg);
+      return variable;
+    });
+
     this.tfResources[key] = new LambdaFunction(this, key, {
       s3Bucket: s3Bucket.bucket,
       s3Key: lambdaProperties.Code.S3Key,
@@ -767,8 +779,7 @@ export class Cf2Tf extends TerraformStack {
       runtime: lambdaProperties.Runtime,
       timeout: lambdaProperties.Timeout,
 
-      //TODO: fix env.
-      environment: [],
+      environment: environment,
     });
   }
 
@@ -871,9 +882,8 @@ export class Cf2Tf extends TerraformStack {
     //1. read data from remote state
     if (!this.remoteState) {
       this.remoteState = new DataTerraformRemoteStateS3(this, 'remoteState', {
-        //TODO: make it configurable.
-        bucket: '',
-        key: '',
+        bucket: 'asu-terraform-state',
+        key: 'asu/terraform.tfstate',
       });
     }
 
