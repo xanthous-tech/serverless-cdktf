@@ -866,7 +866,7 @@ export class Cf2Tf extends TerraformStack {
         return this.convertFnSplit(resources[key]);
       case 'Fn::Select':
         return this.convertFnSelect(resources[key]);
-      case 'CDKTF::RemoteData':
+      case 'Fn::ImportValue':
         return this.convertRemoteData(resources[key]);
       default:
         throw new Error(`cannot find key ${key}`);
