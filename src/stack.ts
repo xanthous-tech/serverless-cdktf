@@ -79,16 +79,16 @@ export class Cf2Tf extends TerraformStack {
 
     // variable retrieval
     // TODO: move deployment bucket name and partition into cdktf custom config
-    const variables = this.serverless.service.custom;
-    const region = this.serverless.service.provider.region || variables.defaultRegion;
-    const accountId = variables.accountId;
+    const cdktf_variables = this.serverless.service.custom.cdktf;
+    const region = this.serverless.service.provider.region;
+    const accountId = cdktf_variables.accountId;
     const partition = 'aws';
     const urlSuffix = 'amazonaws.com';
 
-    this.deployBucketName = variables.deploymentBucketName;
+    this.deployBucketName = cdktf_variables.deploymentBucketName;
 
-    const stateBucket = variables.s3backend.bucket;
-    const stateKey = variables.s3backend.key;
+    const stateBucket = cdktf_variables.s3backend.bucket;
+    const stateKey = cdktf_variables.s3backend.key;
 
     console.log(`Bucket Name is ${stateBucket}`);
     console.log(`Terraform state ${stateKey}`);
