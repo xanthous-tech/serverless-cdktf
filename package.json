@@ -7,10 +7,6 @@
   "bin": {
     "sls-cdktf": "bin/sls-cdktf"
   },
-  "files": [
-    "lib/**/*",
-    "patches/*"
-  ],
   "license": "MIT",
   "author": "Xanthous Tech Developers <hi@x-tech.io>",
   "contributors": [

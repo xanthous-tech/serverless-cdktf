@@ -1,6 +1,6 @@
 import Serverless from 'serverless';
 import { Hooks } from 'serverless/classes/Plugin';
-import { createCdktfJson, runCdktfGet, runCdktfSynth, runCdktfDeploy } from './utils/cdktf';
+import { createCdktfJson, runCdktfGet, runCdktfSynth, runCdktfDeploy, runCdktfDestroy } from './utils/cdktf';
 
 interface PluginDefinition {
   pluginName: string;
@@ -23,6 +23,7 @@ class ServerlessCdktfPlugin {
     pluginHooks['aws:deploy:deploy:updateStack'] = pluginHooks['aws:deploy:deploy:updateStack'].filter(
       (plugin: PluginDefinition) => plugin.pluginName !== 'AwsDeploy',
     );
+    pluginHooks['remove:remove'] = pluginHooks['remove:remove'].filter((plugin: PluginDefinition) => plugin.pluginName !== 'AwsRemove');
     // kill all aws:info:* hooks
     pluginHooks['aws:info:validate'] = [];
     pluginHooks['aws:info:gatherData'] = [];
@@ -41,13 +42,31 @@ class ServerlessCdktfPlugin {
       // 'after:package:finalize': this.convertToTerraformStack.bind(this),
       'aws:deploy:deploy:createStack': this.createTerraformStack.bind(this),
       'aws:deploy:deploy:updateStack': this.convertToTerraformStack.bind(this, 'update-stack'),
+      'remove:remove': this.removeTerraformStack.bind(this),
     };
 
     // find fullstack-serverless plugin and disable the distribution invalidation step
     const fullstackServerlessPlugin: any = serverless.pluginManager.plugins.find((plugin) => plugin.constructor.name === 'ServerlessFullstackPlugin');
     if (fullstackServerlessPlugin) {
-      serverless.cli.log('disabling distribution invalidation in fullstack-serverless, you may need to invalidate yourself');
+      serverless.cli.log('disabling distribution invalidation in fullstack-serverless plugin, you may need to invalidate yourself');
       fullstackServerlessPlugin.cliOptions['invalidate-distribution'] = false;
+    }
+  }
+
+  private async removeTerraformStack(): Promise<void> {
+    const awsRemovePlugin: any = this.serverless.pluginManager.plugins.find((plugin) => plugin.constructor.name === 'AwsRemove');
+
+    if (!awsRemovePlugin) {
+      throw new Error('cannot find aws remove plugin');
+    }
+
+    try {
+      await awsRemovePlugin.validate();
+      await awsRemovePlugin.emptyS3Bucket();
+      await runCdktfDestroy(this.serverless, 'update-stack');
+    } catch (err) {
+      this.serverless.cli.log('error during stack remove');
+      throw err;
     }
   }
 
@@ -78,11 +97,11 @@ class ServerlessCdktfPlugin {
     await createCdktfJson(this.serverless);
     await runCdktfGet(this.serverless);
 
-    if (this.options['noDeploy'] || (this.serverless.service.provider as any).shouldNotDeploy) {
-      await runCdktfSynth(this.serverless, stack);
-    } else {
-      await runCdktfDeploy(this.serverless, stack);
-    }
+    // if (this.options['noDeploy'] || (this.serverless.service.provider as any).shouldNotDeploy) {
+    //   await runCdktfSynth(this.serverless, stack);
+    // } else {
+    await runCdktfDeploy(this.serverless, stack);
+    // }
   }
 }
 

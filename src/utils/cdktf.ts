@@ -102,3 +102,30 @@ export async function runCdktfDeploy(serverless: Serverless, stack: string): Pro
     });
   });
 }
+
+export async function runCdktfDestroy(serverless: Serverless, stack: string): Promise<void> {
+  serverless.cli.log(`running cdktf destroy on ${stack}`);
+  return new Promise<void>((resolve, reject) => {
+    //TODO: config cdktf path in this plugin options.
+    const cdktfGet = spawn(
+      `${getCdktfBinPath(serverless)}/cdktf`,
+      ['destroy', '-a', `"${getCdktfBinPath(serverless)}/sls-cdktf --stack ${stack}"`, '-o', `./.serverless/cdktf-${stack}`, '--auto-approve'],
+      {
+        cwd: process.cwd(),
+        stdio: 'inherit',
+      },
+    );
+
+    cdktfGet.on('close', (code) => {
+      if (code === 0) {
+        resolve();
+      } else {
+        reject(new Error('process finished with error code ' + code));
+      }
+    });
+
+    cdktfGet.on('error', (error) => {
+      reject(error);
+    });
+  });
+}
