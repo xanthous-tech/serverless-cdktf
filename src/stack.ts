@@ -1,5 +1,5 @@
 import Serverless from 'serverless';
-import { TerraformStack, TerraformOutput, TerraformResource, S3Backend } from 'cdktf';
+import { TerraformStack, TerraformOutput, TerraformResource, S3Backend, DataTerraformRemoteState, DataTerraformRemoteStateS3 } from 'cdktf';
 import { Construct } from 'constructs';
 import _ from 'lodash';
 
@@ -61,6 +61,8 @@ export class Cf2Tf extends TerraformStack {
     [key: string]: string;
   };
 
+  public remoteState: DataTerraformRemoteState;
+
   constructor(scope: Construct, name: string, public serverless: Serverless, cfTemplate: any) {
     super(scope, name);
 
@@ -77,46 +79,69 @@ export class Cf2Tf extends TerraformStack {
 
     // variable retrieval
     // TODO: move deployment bucket name and partition into cdktf custom config
-    const variables = this.serverless.service.custom;
-    const region = this.serverless.service.provider.region || variables.defaultRegion;
-    const accountId = variables.accountId;
+    const cdktf_variables = this.serverless.service.custom.cdktf;
+    const region = this.serverless.service.provider.region;
+    const accountId = this.serverless.service.custom.accountId;
     const partition = 'aws';
+    const urlSuffix = 'amazonaws.com';
 
-    this.deployBucketName = variables.deploymentBucketName;
+    this.deployBucketName = cdktf_variables.deploymentBucketName;
 
-    console.log(`Bucket Name is ${this.deployBucketName}`);
-    console.log(`Terraform state ${name}`);
+    const stateBucket = cdktf_variables.s3backend.bucket;
+    const stateKey = cdktf_variables.s3backend.key;
+
+    const remoteState = cdktf_variables.remoteState;
+
+    console.log(`Bucket Name is ${stateBucket}`);
+    console.log(`Terraform state ${stateKey}`);
 
     this.refMaps = {
       'AWS::Region': region,
       'AWS::Partition': partition,
       'AWS::AccountId': accountId,
+      'AWS::URLSuffix': urlSuffix,
     };
 
     new S3Backend(this, {
       region: serverless.service.provider.region,
       profile: (serverless.service.provider as any).profile,
-      // TODO: make bucket configurable
-      bucket: 'asu-terraform-state',
-      key: name,
+      bucket: stateBucket,
+      key: stateKey,
+    });
+
+    this.remoteState = new DataTerraformRemoteStateS3(this, 'remoteState', {
+      region: remoteState.region,
+      profile: (serverless.service.provider as any).profile,
+      bucket: remoteState.bucket,
+      key: remoteState.key,
     });
 
     this.convertCfResources();
-    // this.convertCfOutputs();
+    this.convertCfOutputs();
   }
 
   private convertCfOutputs(): void {
     console.log(`converting outputs ${JSON.stringify(this.cfOutputs)}`);
     for (const key in this.cfOutputs) {
-      console.log(`converting ${key}`);
+      console.log(`converting key:${key}`);
       if (!Object.prototype.hasOwnProperty.call(this.cfOutputs, key)) {
         continue;
       }
 
       const cfOutput = this.cfOutputs[key];
-      this.tfOutputs[key] = new TerraformOutput(this, key, {
-        value: this.handleResources(cfOutput.Value),
+
+      //TODO: maybe fix this later.
+      //1. there's no sensitive in cloudformation outputs
+      //2. there's export:name in cloudformation.
+      this.tfOutputs[key] = new TerraformOutput(this, `Output${key}`, {
+        value: 'empty_to_replace',
+        description: cfOutput.Description,
       });
+
+      const value = this.handleResources(cfOutput.Value);
+
+      this.tfOutputs[key].addOverride('value', value);
+
       console.log(`output ${key} converted`);
     }
   }
@@ -738,6 +763,13 @@ export class Cf2Tf extends TerraformStack {
 
     const role = this.handleResources(lambdaProperties.Role);
 
+    const env = lambdaProperties.Environment.Variables;
+
+    const variables = Object.keys(env).reduce((acc: { [key: string]: string }, key) => {
+      acc[key] = this.handleResources(env[key]);
+      return acc;
+    }, {});
+
     this.tfResources[key] = new LambdaFunction(this, key, {
       s3Bucket: s3Bucket.bucket,
       s3Key: lambdaProperties.Code.S3Key,
@@ -747,10 +779,11 @@ export class Cf2Tf extends TerraformStack {
       role: role,
       runtime: lambdaProperties.Runtime,
       timeout: lambdaProperties.Timeout,
-
-      //TODO: fix env.
-      environment: [],
     });
+
+    if (!_.isEmpty(variables)) {
+      this.tfResources[key].addOverride('environment', [{ variables }]);
+    }
   }
 
   public addLambdaVersion(key: string, cfTemplate: any): void {
@@ -836,9 +869,25 @@ export class Cf2Tf extends TerraformStack {
         return this.convertFnSplit(resources[key]);
       case 'Fn::Select':
         return this.convertFnSelect(resources[key]);
+      case 'Fn::ImportValue':
+        return this.convertRemoteData(resources[key]);
       default:
         throw new Error(`cannot find key ${key}`);
     }
+  }
+
+  /**
+   * 形式是这样的 value -> import value
+   *
+   */
+  public convertRemoteData(output: any): string {
+    //如果形式是 string，那么直接返回？
+
+    if (!this.remoteState) {
+      throw new Error('invalid remote state');
+    }
+
+    return this.remoteState.get(output);
   }
 
   public convertGetAtt(data: any[]): string {

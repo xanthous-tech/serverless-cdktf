@@ -10,6 +10,23 @@ yarn add serverless-cdktf --dev
 
 just add the plugin into the `plugins` field in `serverless.yml` and it will do the rest.
 
+# variables
+
+config varibles in `serverless.yaml` custom part:
+
+```
+custom:
+  cdktf:
+    accountId: xxxxx
+    deploymentBucketName: xxxxxxx
+    s3backend:
+      bucket: xxxxxxx
+      key: xxx
+    binPath: ../node_modules/.bin
+
+```
+
+
 # Resources Supported
 
 - [x] S3 Bucket
