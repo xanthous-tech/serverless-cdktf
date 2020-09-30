@@ -112,9 +112,6 @@ export class Cf2Tf extends TerraformStack {
     this.remoteState = new DataTerraformRemoteStateS3(this, 'remoteState', {
       region: remoteState.region,
       profile: (serverless.service.provider as any).profile,
-      // TODO: make bucket configurable
-      // bucket: 'asu-terraform-state',
-      // key: name,
       bucket: remoteState.bucket,
       key: remoteState.key,
     });
