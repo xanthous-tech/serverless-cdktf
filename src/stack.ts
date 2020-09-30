@@ -103,6 +103,13 @@ export class Cf2Tf extends TerraformStack {
     };
 
     new S3Backend(this, {
+      region: serverless.service.provider.region,
+      profile: (serverless.service.provider as any).profile,
+      bucket: stateBucket,
+      key: stateKey,
+    });
+
+    this.remoteState = new DataTerraformRemoteStateS3(this, 'remoteState', {
       region: remoteState.region,
       profile: (serverless.service.provider as any).profile,
       // TODO: make bucket configurable
@@ -110,13 +117,6 @@ export class Cf2Tf extends TerraformStack {
       // key: name,
       bucket: remoteState.bucket,
       key: remoteState.key,
-    });
-
-    this.remoteState = new DataTerraformRemoteStateS3(this, 'remoteState', {
-      region: serverless.service.provider.region,
-      profile: (serverless.service.provider as any).profile,
-      bucket: 'asu-terraform-state',
-      key: 'asu/terraform.tfstate',
     });
 
     this.convertCfResources();
