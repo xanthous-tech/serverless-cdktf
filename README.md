@@ -8,7 +8,7 @@ A [serverless](https://serverless.com) plugin that deploys AWS serverless stack 
 yarn add serverless-cdktf --dev
 ```
 
-just add the plu    gin into the `plugins` field in `serverless.yml` and it will do the rest.
+just add the plugin into the `plugins` field in `serverless.yml` and it will do the rest.
 
 # variables
 

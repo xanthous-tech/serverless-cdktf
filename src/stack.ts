@@ -81,7 +81,7 @@ export class Cf2Tf extends TerraformStack {
     // TODO: move deployment bucket name and partition into cdktf custom config
     const cdktf_variables = this.serverless.service.custom.cdktf;
     const region = this.serverless.service.provider.region;
-    const accountId = cdktf_variables.accountId;
+    const accountId = this.serverless.service.custom.accountId;
     const partition = 'aws';
     const urlSuffix = 'amazonaws.com';
 
