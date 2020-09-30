@@ -87,13 +87,7 @@ export class Cf2Tf extends TerraformStack {
 
     this.deployBucketName = cdktf_variables.deploymentBucketName;
 
-    const stateBucket = cdktf_variables.s3backend.bucket;
-    const stateKey = cdktf_variables.s3backend.key;
-
-    const remoteState = cdktf_variables.remoteState;
-
-    console.log(`Bucket Name is ${stateBucket}`);
-    console.log(`Terraform state ${stateKey}`);
+    const { s3Backend, remoteState } = cdktf_variables;
 
     this.refMaps = {
       'AWS::Region': region,
@@ -103,15 +97,19 @@ export class Cf2Tf extends TerraformStack {
     };
 
     new S3Backend(this, {
-      region: serverless.service.provider.region,
-      profile: (serverless.service.provider as any).profile,
-      bucket: stateBucket,
-      key: stateKey,
+      region: s3Backend.region || serverless.service.provider.region,
+      profile: s3Backend.profile || (serverless.service.provider as any).profile,
+      accessKey: s3Backend.accessKey,
+      secretKey: s3Backend.secretKey,
+      bucket: s3Backend.bucket,
+      key: s3Backend.key,
     });
 
     this.remoteState = new DataTerraformRemoteStateS3(this, 'remoteState', {
-      region: remoteState.region,
-      profile: (serverless.service.provider as any).profile,
+      region: remoteState.region || serverless.service.provider.region,
+      profile: remoteState.profile || (serverless.service.provider as any).profile,
+      accessKey: s3Backend.accessKey,
+      secretKey: s3Backend.secretKey,
       bucket: remoteState.bucket,
       key: remoteState.key,
     });

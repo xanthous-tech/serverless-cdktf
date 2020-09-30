@@ -59,7 +59,7 @@ class ServerlessCdktfPlugin {
       throw new Error('cannot find aws deploy plugin');
     }
 
-    const deploymentBucketName = this.serverless.service.custom.deploymentBucketName;
+    const deploymentBucketName = this.serverless.service.custom.cdktf.deploymentBucketName;
 
     try {
       await awsDeployPlugin.existsDeploymentBucket(deploymentBucketName);
