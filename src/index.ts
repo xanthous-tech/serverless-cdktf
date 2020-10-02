@@ -54,6 +54,12 @@ class ServerlessCdktfPlugin {
   }
 
   private async removeTerraformStack(): Promise<void> {
+    this.serverless.cli.log('removing terraform stack');
+
+    const deploymentBucketName = this.serverless.service.custom.cdktf.deploymentBucketName;
+    this.serverless.cli.log('injecting deployment bucket name into serverless instance');
+    this.serverless.service.provider.deploymentBucket = deploymentBucketName;
+
     const awsRemovePlugin: any = this.serverless.pluginManager.plugins.find((plugin) => plugin.constructor.name === 'AwsRemove');
 
     if (!awsRemovePlugin) {
